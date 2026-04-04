@@ -1,19 +1,19 @@
 # Datonfly Autocode
 
-A framework for delivering **per-user, AI-customizable applications** on top of a
-shared, vendor-supplied base application. Autocode combines existing vendor code
-with on-demand, AI-generated code so that end users — including non-developers —
-can both **operate** and **extend** an application through natural language.
+A framework for delivering **per-user, AI-customizable applications** on top of
+a shared, vendor-supplied base application. Autocode combines existing vendor
+code with on-demand, AI-generated code so that end users — including
+non-developers — can both **operate** and **extend** an application through
+natural language.
 
 Two capabilities are offered behind a single natural-language surface:
 
-- **Operate** — drive the *existing* user interface with natural-language input
+- **Operate** — drive the _existing_ user interface with natural-language input
   that resolves to existing functionality and user-provided parameters. No new
   code is produced; the running application exposes tools and the assistant
-  invokes them.
-  _Example:_ "search for projects starting in January".
+  invokes them. _Example:_ "search for projects starting in January".
 
-- **Generate** — *extend* the application with new, on-demand AI-generated code
+- **Generate** — _extend_ the application with new, on-demand AI-generated code
   that is built, deployed, and run as a per-user variant of the application.
   _Example:_ "add a new view showing projects as a Gantt chart".
 
@@ -35,8 +35,7 @@ that run inside it:
 
 - **The framework implementation is single-stack.** Autocode itself is built
   with Node.js, strictly-typed TypeScript, React with Material UI, and NestJS,
-  organized as a pnpm + Turbo monorepo. See
-  [CONVENTIONS.md](CONVENTIONS.md).
+  organized as a pnpm + Turbo monorepo. See [CONVENTIONS.md](CONVENTIONS.md).
 
 - **Applications running inside the framework may use any stack.** A vendor
   application can be built in TypeScript/React, Python, or any other supported
@@ -45,9 +44,9 @@ that run inside it:
   or libraries.
 
 - **The vendor supplies the agent instructions for their stack.** Because the
-  codegen agent must produce idiomatic code in the application's own language and
-  architecture, the application vendor provides the prompts, instructions, and
-  tool definitions that teach the agent how to build on that specific stack.
+  codegen agent must produce idiomatic code in the application's own language
+  and architecture, the application vendor provides the prompts, instructions,
+  and tool definitions that teach the agent how to build on that specific stack.
 
 - **The framework ships ready-made stack templates.** Templates bundle a base
   application skeleton, extension hooks, the application SDK, and the agent
@@ -75,10 +74,10 @@ that run inside it:
 ### Out of scope
 
 - The vendor application's own business logic and data ownership — Autocode
-  extends and orchestrates applications but does not own their domain data, which
-  remains in vendor services.
+  extends and orchestrates applications but does not own their domain data,
+  which remains in vendor services.
 - General-purpose CI/CD for vendor base applications — Autocode builds and
-  deploys *per-user variants*, not the vendor's authoritative base release.
+  deploys _per-user variants_, not the vendor's authoritative base release.
 - Acting as an identity provider — authentication is delegated to an OIDC
   provider, consistent with `datonfly-assistant`.
 
@@ -95,11 +94,11 @@ that run inside it:
 - **Per-user Git history** — every AI-generated change is a commit; any prior
   version can be restored.
 - **On-demand codegen sandbox** — an ephemeral environment containing the cloned
-  repository, vendor-supplied agent instructions, and the tools needed to publish
-  a new version of the application to the user.
+  repository, vendor-supplied agent instructions, and the tools needed to
+  publish a new version of the application to the user.
 - **Extension hooks** — the vendor base application exposes typed hooks (menus,
-  views/routes, panels, data sources) that generated code extends without forking
-  the base library.
+  views/routes, panels, data sources) that generated code extends without
+  forking the base library.
 - **Controlled library registry** — generated code may depend only on
   allow-listed packages, or on a curated mirror of selected public packages.
 - **First-class recovery** — health-gated deploys, isolation of sub-frame

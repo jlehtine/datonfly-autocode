@@ -9,9 +9,10 @@ as each predecessor lands.
 
 Conventions reminder: packages are scoped `@datonfly-autocode/*`; strict
 TypeScript; Prettier (printWidth 120, tabWidth 4); ESLint 10 `strictTypeChecked`
-+ `stylisticTypeChecked`; commit messages in sentence case ending with a period.
-Mirror the sibling `datonfly-assistant` tooling versions unless there is a reason
-to diverge.
+
+- `stylisticTypeChecked`; commit messages in sentence case ending with a period.
+  Mirror the sibling `datonfly-assistant` tooling versions unless there is a
+  reason to diverge.
 
 ---
 
@@ -30,8 +31,8 @@ skeleton and tooling parity with `datonfly-assistant`. Exit criteria:
       `typescript-eslint`, `eslint`, `prettier`,
       `@ianvs/prettier-plugin-sort-imports`, `turbo`, `@types/node`, `husky`,
       `lint-staged`, React ESLint plugins, `globals`).
-- [ ] Add `pnpm-workspace.yaml` with `packages: [packages/*]` (add `e2e` later in
-      Phase 9). Carry over `ignoredBuiltDependencies` for `@nestjs/core` and
+- [ ] Add `pnpm-workspace.yaml` with `packages: [packages/*]` (add `e2e` later
+      in Phase 9). Carry over `ignoredBuiltDependencies` for `@nestjs/core` and
       `esbuild`.
 - [ ] Add `turbo.json` with `clean`, `build` (`dependsOn: ["^build"]`,
       `outputs: ["dist/**"]`), `lint`, `lint:fix`, `test`, and `dev`
@@ -50,9 +51,9 @@ skeleton and tooling parity with `datonfly-assistant`. Exit criteria:
       `projectService: true`, the `consistent-type-imports/exports`,
       `explicit-module-boundary-types`, and `no-unused-vars` (`^_` ignore)
       rules, plus the React/`tsx` blocks for the future Shell.
-- [ ] Add `.prettierrc.json` (printWidth 120, tabWidth 4, import-sort plugin with
-      `importOrder` updated to `^@datonfly-autocode/(.*)$`, and the Markdown
-      override: printWidth 80, proseWrap always, tabWidth 2).
+- [ ] Add `.prettierrc.json` (printWidth 120, tabWidth 4, import-sort plugin
+      with `importOrder` updated to `^@datonfly-autocode/(.*)$`, and the
+      Markdown override: printWidth 80, proseWrap always, tabWidth 2).
 - [ ] Add `.editorconfig` mirroring the assistant (2-space indent for
       config/markup, LF, UTF-8, final newline, preserve trailing whitespace in
       Markdown).
@@ -80,9 +81,9 @@ skeleton and tooling parity with `datonfly-assistant`. Exit criteria:
 
 - [ ] Verify `.github/copilot-instructions.md` references README/ARCHITECTURE/
       CONVENTIONS only (already present — no convention duplication).
-- [ ] Add `INSTALL.md` stub describing prerequisites (Node 22+, pnpm 10+, Docker,
-      local Kubernetes via kind/k3d) and the `pnpm install` / `pnpm build`
-      bootstrap. Expand in Phase 9.
+- [ ] Add `INSTALL.md` stub describing prerequisites (Node 22+, pnpm 10+,
+      Docker, local Kubernetes via kind/k3d) and the `pnpm install` /
+      `pnpm build` bootstrap. Expand in Phase 9.
 - [ ] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`, and
       `pnpm format:check` succeed on the empty skeleton.
 - [ ] Commit: "Scaffold the Autocode monorepo and core package skeleton."
@@ -126,8 +127,8 @@ Suggested `core/src` layout (mirrors the assistant's `core`): `types/`, `dto/`,
 Each interface is narrow and typed so reference and alternative implementations
 are swappable (plan §5, CONVENTIONS "Pluggable providers").
 
-- [ ] `Orchestrator` — session lifecycle, sandbox start/stop, deployment routing,
-      recovery transitions, entitlement checks.
+- [ ] `Orchestrator` — session lifecycle, sandbox start/stop, deployment
+      routing, recovery transitions, entitlement checks.
 - [ ] `SandboxProvider` — create/destroy per-user namespace/pods, apply network
       policy + quotas, lifecycle (start/stop/scale-to-zero), health, log/stream
       access.
@@ -145,8 +146,8 @@ are swappable (plan §5, CONVENTIONS "Pluggable providers").
 - [ ] **Extension hooks** (`src/domain/` or `src/hooks/`): typed registration
       descriptors for menus, routes/views, panels, widgets, and data sources;
       include a contract version constant.
-- [ ] **Operate tools**: typed, discoverable action descriptors (name, Zod params
-      schema, side-effect classification) the assistant can invoke.
+- [ ] **Operate tools**: typed, discoverable action descriptors (name, Zod
+      params schema, side-effect classification) the assistant can invoke.
 - [ ] **Shell ↔ app bridge** (`src/bridge/`): Zod-validated `postMessage`
       message union — lifecycle (`ready`, `heartbeat`), navigation, error
       reporting (build vs. runtime), Operate dispatch, recovery commands — with
@@ -167,8 +168,8 @@ are swappable (plan §5, CONVENTIONS "Pluggable providers").
       recovery state changes).
 - [ ] Re-export every public type, schema, and constant from
       `packages/core/src/index.ts`; ensure JSDoc on all public surfaces.
-- [ ] Run `pnpm build` + `pnpm lint:fix`; commit: "Define core contracts:
-      domain model, providers, and application contracts."
+- [ ] Run `pnpm build` + `pnpm lint:fix`; commit: "Define core contracts: domain
+      model, providers, and application contracts."
 
 ---
 
@@ -176,9 +177,9 @@ are swappable (plan §5, CONVENTIONS "Pluggable providers").
 
 First slice only; full work expanded once Phase 1 lands.
 
-- [ ] Scaffold `packages/app-sdk/` (`@datonfly-autocode/app-sdk`): implements the
-      bridge client, hook registries, and Operate-tool registration against the
-      `core` contracts. React/MUI peer.
+- [ ] Scaffold `packages/app-sdk/` (`@datonfly-autocode/app-sdk`): implements
+      the bridge client, hook registries, and Operate-tool registration against
+      the `core` contracts. React/MUI peer.
 - [ ] Scaffold `packages/reference-vendor-app/`: minimal UI base library + small
       backend exercising at least one extension hook and one Operate tool.
 - [ ] Wire both into `pnpm-workspace.yaml`, root `tsconfig.json` references, and
@@ -199,8 +200,8 @@ First slice only; full work expanded once Phase 1 lands.
       same manifests target any full-featured managed or local cluster in
       production. **Tenancy is namespace-per-user.**
 - [ ] **Phase 5 — Repo + build/deploy** (`packages/repo-git`,
-      `packages/build-deploy`): deployment routing, health-gated deploys, revert.
-      `RepoProvider` is pluggable; the initial implementation targets a
+      `packages/build-deploy`): deployment routing, health-gated deploys,
+      revert. `RepoProvider` is pluggable; the initial implementation targets a
       **self-hosted Forgejo** instance running in-cluster (Gitea-API compatible,
       so a Gitea backend remains a drop-in alternative).
 - [ ] **Phase 6 — Codegen** (`packages/codegen`): codegen sandbox, agent

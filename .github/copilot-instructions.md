@@ -8,13 +8,13 @@ duplicate them here.
 
 ## Framework vs. applications
 
-These instructions, and all conventions referenced above, apply to the **Datonfly
-Autocode framework implementation itself**. They do **not** apply to applications
-executed within the framework — those follow their own stack's conventions,
-defined by each vendor application and its stack template. When working on
-framework code, use the framework stack (Node.js, strict TypeScript, React/MUI,
-NestJS, pnpm + Turbo). Keep contracts in `core` stack-neutral so non-TypeScript
-applications can interoperate.
+These instructions, and all conventions referenced above, apply to the
+**Datonfly Autocode framework implementation itself**. They do **not** apply to
+applications executed within the framework — those follow their own stack's
+conventions, defined by each vendor application and its stack template. When
+working on framework code, use the framework stack (Node.js, strict TypeScript,
+React/MUI, NestJS, pnpm + Turbo). Keep contracts in `core` stack-neutral so
+non-TypeScript applications can interoperate.
 
 ## Development Phase
 

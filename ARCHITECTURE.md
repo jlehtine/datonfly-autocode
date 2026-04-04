@@ -11,20 +11,20 @@ application and its stack template.
 Autocode is organized into three planes:
 
 - **Control plane (shared, multi-tenant).** The always-on framework services:
-  session orchestration, sandbox management, per-user Git, build/deploy,
-  the package registry, authentication, and the assistant gateway. The control
-  plane **never executes user-generated code**.
+  session orchestration, sandbox management, per-user Git, build/deploy, the
+  package registry, authentication, and the assistant gateway. The control plane
+  **never executes user-generated code**.
 
-- **Runtime plane (per-user, isolated).** On-demand Kubernetes workloads that run
-  a single user's application variant and, when needed, an ephemeral codegen
+- **Runtime plane (per-user, isolated).** On-demand Kubernetes workloads that
+  run a single user's application variant and, when needed, an ephemeral codegen
   sandbox. Every per-user workload is confined by network policy to vendor
   services and the minimal control-plane endpoints it is explicitly allowed to
   use.
 
 - **Vendor plane (authoritative).** The vendor's own backend services
   (authenticating requests via OAuth2/JWT) and the published vendor UI base
-  library. This plane owns application domain data and is shared by all users; it
-  is extended, never forked, by generated code.
+  library. This plane owns application domain data and is shared by all users;
+  it is extended, never forked, by generated code.
 
 ```
                           ┌──────────────────────────────────────────┐
@@ -89,7 +89,7 @@ Shell sub-frame.
 - Reaches vendor backend services using short-lived, audience-scoped tokens
   minted by the control plane; it never holds long-lived vendor credentials.
 - Reports lifecycle and error events to the Shell over the typed bridge.
-- Is replaced only by a *healthy* new deployment; an unhealthy deploy never
+- Is replaced only by a _healthy_ new deployment; an unhealthy deploy never
   displaces a working one (see Recovery).
 
 ### 3.2 Codegen sandbox pod
@@ -102,9 +102,9 @@ job.
   changes and publish a new application version.
 - Runs the AI agent (provided by the `datonfly-assistant` agent runtime) to
   produce repository changes from the user's prompt and curated context.
-- Has write access only to its cloned repository and to the package registry;
-  it cannot reach vendor production data unless explicitly granted a scoped
-  token for the job.
+- Has write access only to its cloned repository and to the package registry; it
+  cannot reach vendor production data unless explicitly granted a scoped token
+  for the job.
 - Is destroyed when the job completes; all durable output is captured as commits
   in the per-user repository.
 
@@ -123,15 +123,15 @@ job.
 - **Build/Deploy Service.** Builds a Revision into a deployable artifact (UI
   bundle and/or backend image), emits structured build diagnostics, publishes
   artifacts, and coordinates health-gated deployment with the Sandbox Manager.
-- **Package Registry.** The controlled dependency source for generated code:
-  an allow-list of vetted packages and, optionally, a curated mirror of selected
+- **Package Registry.** The controlled dependency source for generated code: an
+  allow-list of vetted packages and, optionally, a curated mirror of selected
   public packages with provenance. Generalizes across ecosystems (e.g. npm for
   TypeScript applications, PyPI for Python applications).
 - **Auth.** OIDC-based end-user authentication with JWT sessions, reusing the
   `datonfly-assistant` model. Mints short-lived, audience-scoped tokens for
   sandboxes to call vendor APIs via OAuth2 token exchange.
-- **Assistant Gateway.** Embeds the `datonfly-assistant` chat/agent platform that
-  backs both the Operate surface and the repair conversation in the Shell.
+- **Assistant Gateway.** Embeds the `datonfly-assistant` chat/agent platform
+  that backs both the Operate surface and the repair conversation in the Shell.
 
 ## 5. Frontend Shell
 
@@ -142,9 +142,9 @@ container for the per-user application.
   (sandbox status, resource state), and the recovery panel. Built with React and
   Material UI, consistent with the framework stack.
 - **Application sub-frame.** The per-user application variant is loaded into a
-  sandboxed `<iframe sandbox>`. Isolating the application in a sub-frame keeps the
-  framework top frame alive even when the application fails, which is essential
-  for recovery.
+  sandboxed `<iframe sandbox>`. Isolating the application in a sub-frame keeps
+  the framework top frame alive even when the application fails, which is
+  essential for recovery.
 - **Typed bridge.** The Shell and the application communicate over a strict,
   schema-validated `postMessage` bridge with origin checks in both directions:
   lifecycle (ready/heartbeat), navigation, error reporting (distinguishing build
@@ -163,10 +163,10 @@ templates implement. (Concrete TypeScript definitions live in the framework's
   invoke against the running application, with parameter schemas and side-effect
   classification.
 - **Shell ↔ application bridge** — the `postMessage` protocol described above.
-- **Vendor application manifest** — declares the base library coordinates, vendor
-  backend endpoints, hook contract version, registry/library policy, resource
-  limits, recovery options, and a reference to the stack template and agent
-  instructions.
+- **Vendor application manifest** — declares the base library coordinates,
+  vendor backend endpoints, hook contract version, registry/library policy,
+  resource limits, recovery options, and a reference to the stack template and
+  agent instructions.
 - **Codegen job protocol** — prompt and curated context in, planned diff →
   commit(s) → build result → deploy result out, with every step recorded and
   revertible.
@@ -177,7 +177,8 @@ templates implement. (Concrete TypeScript definitions live in the framework's
   `NetworkPolicy`. Egress is allowed only to (a) declared vendor service
   endpoints and (b) the minimal control-plane endpoints a workload needs (for
   example, repository push during codegen). There is no arbitrary internet
-  egress; dependency installation flows exclusively through the Package Registry.
+  egress; dependency installation flows exclusively through the Package
+  Registry.
 - **Scoped, short-lived credentials.** The control plane performs OAuth2 token
   exchange to issue audience-scoped JWTs that sandboxes present to vendor APIs.
   Long-lived vendor credentials never reside in a sandbox.
@@ -192,26 +193,26 @@ templates implement. (Concrete TypeScript definitions live in the framework's
 
 ## 8. Versioning and per-user Git workflow
 
-- A user workspace repository is seeded from the application's **stack template**,
-  which imports the vendor base library and the application SDK with empty hook
-  registrations.
+- A user workspace repository is seeded from the application's **stack
+  template**, which imports the vendor base library and the application SDK with
+  empty hook registrations.
 - Each codegen job runs on a branch. On success, commits are integrated into the
   workspace's main line and tagged with a Revision id and the build artifact
   digest.
-- **Revert** restores a prior Revision tag, then rebuilds and redeploys it — fully
-  reversible with no data loss, because durable *user data* lives in vendor
-  services rather than in the repository.
+- **Revert** restores a prior Revision tag, then rebuilds and redeploys it —
+  fully reversible with no data loss, because durable _user data_ lives in
+  vendor services rather than in the repository.
 - History and diffs are exposed through the session/recovery UI for transparency
   and rollback.
 
 ## 9. Error handling and recovery
 
-Recovery is a first-class state machine owned by the orchestrator and surfaced in
-the Shell recovery panel.
+Recovery is a first-class state machine owned by the orchestrator and surfaced
+in the Shell recovery panel.
 
-- **States.** `vanilla` → `building` → `deployed` / `build_failed`,
-  with `runtime_failed` reachable from `deployed`, and `recovered` as the
-  resolution of a failure.
+- **States.** `vanilla` → `building` → `deployed` / `build_failed`, with
+  `runtime_failed` reachable from `deployed`, and `recovered` as the resolution
+  of a failure.
 - **Build failure.** The Build/Deploy Service captures structured diagnostics.
   The Shell presents the error and offers: auto-repair (the codegen repair loop
   re-runs the agent with the diagnostics as context), revert to the last good
@@ -224,8 +225,8 @@ the Shell recovery panel.
 - **Health-gated deploys.** On deployment, the last good App Runtime is retained
   until the new one passes a health gate; a failed deploy never replaces a
   healthy one.
-- **Always-available escape hatch.** "Switch to the vanilla vendor application" is
-  reachable from every failure state, because the vendor base library and
+- **Always-available escape hatch.** "Switch to the vanilla vendor application"
+  is reachable from every failure state, because the vendor base library and
   services are independent of any user-generated code.
 
 ## 10. Stack templates
@@ -240,7 +241,7 @@ A **stack template** packages everything needed to run a class of applications:
 - build and deployment recipes consumed by the Build/Deploy Service, and
 - the registry/library policy defaults for the stack.
 
-The **initial template targets the framework's own stack** (TypeScript /
-React + MUI / NestJS). Because the framework's contracts are stack-neutral,
-additional templates (for example, a Python stack) can be added without changing
-the control plane.
+The **initial template targets the framework's own stack** (TypeScript / React +
+MUI / NestJS). Because the framework's contracts are stack-neutral, additional
+templates (for example, a Python stack) can be added without changing the
+control plane.

@@ -39,20 +39,21 @@ related flags), inheriting from a shared base `tsconfig`.
 
 ## Architecture
 
-- **`core`** declares the shared types, provider interfaces, domain model, and the
-  REST/WebSocket and bridge contracts (paths + Zod schemas). All other packages
-  depend on `core` — never duplicate its definitions.
-- **Pluggable providers.** Capabilities with multiple possible backends — sandbox
-  orchestration, per-user Git, build/deploy, the package registry, and the codegen
-  agent — implement generic interfaces from `core`. Keep provider-specific details
-  out of the orchestrator and shared layers, so a Kubernetes sandbox provider and a
-  local Docker provider (for example) are interchangeable.
-- **Thin standalone shims.** The runnable reference control-plane backend and the
-  reference vendor application are thin compositions of the libraries — keep them
-  minimal.
+- **`core`** declares the shared types, provider interfaces, domain model, and
+  the REST/WebSocket and bridge contracts (paths + Zod schemas). All other
+  packages depend on `core` — never duplicate its definitions.
+- **Pluggable providers.** Capabilities with multiple possible backends —
+  sandbox orchestration, per-user Git, build/deploy, the package registry, and
+  the codegen agent — implement generic interfaces from `core`. Keep
+  provider-specific details out of the orchestrator and shared layers, so a
+  Kubernetes sandbox provider and a local Docker provider (for example) are
+  interchangeable.
+- **Thin standalone shims.** The runnable reference control-plane backend and
+  the reference vendor application are thin compositions of the libraries — keep
+  them minimal.
 - **Stack-neutral contracts, single-stack implementation.** Contracts that
-  applications implement must not assume the framework's stack; the framework's own
-  implementation freely uses it.
+  applications implement must not assume the framework's stack; the framework's
+  own implementation freely uses it.
 
 ## Code formatting
 
@@ -80,11 +81,11 @@ changes.
 
 ## Logging
 
-- When logging a caught error, do not inline `error.message`, `String(error)`, or
-  similar conversions at the call site.
-- Use the shared `formatLoggedError()` helper to produce the logged error string;
-  it walks the `Error.cause` chain so logs include the full nested failure
-  context.
+- When logging a caught error, do not inline `error.message`, `String(error)`,
+  or similar conversions at the call site.
+- Use the shared `formatLoggedError()` helper to produce the logged error
+  string; it walks the `Error.cause` chain so logs include the full nested
+  failure context.
 - Keep user-facing error messages separate from log formatting. Use the full
   formatted chain for logs and audit entries, and expose end-user text only when
   that is the intended behavior of the API or UI surface. This is especially
@@ -94,9 +95,9 @@ changes.
 ## Commit messages
 
 - **Sentence case**, ending with a **period**.
-- Use **imperative mood** when describing an action (e.g. "Add support for…", "Fix
-  an issue with…"). Descriptive noun phrases are acceptable for broader changes
-  (e.g. "Sandbox orchestration scaffolding.").
+- Use **imperative mood** when describing an action (e.g. "Add support for…",
+  "Fix an issue with…"). Descriptive noun phrases are acceptable for broader
+  changes (e.g. "Sandbox orchestration scaffolding.").
 - Optional **scope prefix** with a colon for scoped changes (e.g. "Orchestrator:
   …", "Registry: …").
 - Keep to a **single summary line** — no body paragraph.
@@ -106,17 +107,17 @@ changes.
 All public API interfaces are documented with **JSDoc**.
 
 Project-wide conventions belong in this file (`CONVENTIONS.md`), with the
-architecture in [ARCHITECTURE.md](ARCHITECTURE.md) and the general description in
-[README.md](README.md). Agent-specific instructions (e.g.
+architecture in [ARCHITECTURE.md](ARCHITECTURE.md) and the general description
+in [README.md](README.md). Agent-specific instructions (e.g.
 `.github/copilot-instructions.md`) should only contain agent workflow rules and
 reference these documents for general conventions — never duplicate them.
 
 ## User interface
 
-The framework Shell is built with **Material UI** (`@mui/material`); use Material
-UI components for all framework user-facing elements, and **Material Icons**
-(`@mui/icons-material`) for icons. (Applications inside the framework are not
-bound by this — they follow their own stack.)
+The framework Shell is built with **Material UI** (`@mui/material`); use
+Material UI components for all framework user-facing elements, and **Material
+Icons** (`@mui/icons-material`) for icons. (Applications inside the framework
+are not bound by this — they follow their own stack.)
 
 ## Naming
 
@@ -129,17 +130,17 @@ bound by this — they follow their own stack.)
 When the framework persists control-plane state in PostgreSQL:
 
 - All framework tables live in the **`dfac`** (Datonfly Autocode) PostgreSQL
-  schema, so other Datonfly components can share the same database using their own
-  schemas.
+  schema, so other Datonfly components can share the same database using their
+  own schemas.
 - **Table names** use the **singular** form.
 - **Column names** use `snake_case`.
-- **Schema changes** are managed via Kysely migrations, each file prefixed with an
-  ISO 8601 timestamp.
+- **Schema changes** are managed via Kysely migrations, each file prefixed with
+  an ISO 8601 timestamp.
 - **Migrations must preserve data.** Test deployments may hold real state; never
   drop or destructively alter persisted data — always use data-preserving
   migrations.
 
-Note: durable *application user data* is owned by vendor services, not by the
+Note: durable _application user data_ is owned by vendor services, not by the
 framework. The framework persists only its own control-plane state (sessions,
 workspaces, revisions, deployments, jobs, and similar).
 
