@@ -104,7 +104,7 @@ Suggested `core/src` layout (mirrors the assistant's `core`): `types/`, `dto/`,
 
 ### 1.1 Domain model (`src/domain/`)
 
-- [ ] Define core entity types from the domain model (ARCHITECTURE §4):
+- [x] Define core entity types from the domain model (ARCHITECTURE §4):
       `Tenant`/`Application`, `UserWorkspace`, `Revision`, `Deployment`,
       `Session`, `CodegenJob`, `OperateAction`. Use branded id types (e.g.
       `WorkspaceId`, `RevisionId`, `SessionId`, `DeploymentId`, `CodegenJobId`).
@@ -150,7 +150,7 @@ Suggested `core/src` layout (mirrors the assistant's `core`): `types/`, `dto/`,
     the side-effect classification — distinct from `CodegenJob`, which produces
     new code.
 
-- [ ] Define enums/unions as `const` objects + literal unions (match the
+- [x] Define enums/unions as `const` objects + literal unions (match the
       assistant's `STATUS_CODES`/`ERROR_CODES` style): `BuildStatus`,
       `DeploymentStatus`, `SessionStatus`, `CodegenJobStatus`, and the recovery
       `RecoveryState` (`vanilla` | `building` | `deployed` | `build_failed` |
@@ -158,10 +158,10 @@ Suggested `core/src` layout (mirrors the assistant's `core`): `types/`, `dto/`,
 
 ### 1.2 Error taxonomy (`src/types/`)
 
-- [ ] Define `ErrorCode`/`StatusCode` const maps and the framework error shape.
-- [ ] Port/define the shared `formatLoggedError()` helper (walks `Error.cause`)
+- [x] Define `ErrorCode`/`StatusCode` const maps and the framework error shape.
+- [x] Port/define the shared `formatLoggedError()` helper (walks `Error.cause`)
       referenced by CONVENTIONS.md, with JSDoc and unit-testable signature.
-- [ ] Distinguish build diagnostics vs. runtime diagnostics types for the
+- [x] Distinguish build diagnostics vs. runtime diagnostics types for the
       recovery flow (both fully logged; summarizable for end users).
 
 ### 1.3 Provider interfaces (`src/interfaces/`)
@@ -169,49 +169,49 @@ Suggested `core/src` layout (mirrors the assistant's `core`): `types/`, `dto/`,
 Each interface is narrow and typed so reference and alternative implementations
 are swappable (ARCHITECTURE §4, CONVENTIONS "Pluggable providers").
 
-- [ ] `Orchestrator` — session lifecycle, sandbox start/stop, deployment
+- [x] `Orchestrator` — session lifecycle, sandbox start/stop, deployment
       routing, recovery transitions, entitlement checks.
-- [ ] `SandboxProvider` — create/destroy per-user namespace/pods, apply network
+- [x] `SandboxProvider` — create/destroy per-user namespace/pods, apply network
       policy + quotas, lifecycle (start/stop/scale-to-zero), health, log/stream
       access.
-- [ ] `RepoProvider` — per-user repo create/clone, commit, branch, tag, revert,
+- [x] `RepoProvider` — per-user repo create/clone, commit, branch, tag, revert,
       history, diff.
-- [ ] `BuildProvider` — build a Revision into an artifact, emit structured build
+- [x] `BuildProvider` — build a Revision into an artifact, emit structured build
       diagnostics, publish artifacts.
-- [ ] `RegistryProvider` — allow-list/curated-mirror policy queries, provenance,
+- [x] `RegistryProvider` — allow-list/curated-mirror policy queries, provenance,
       version pinning.
-- [ ] `CodegenProvider` — run a codegen/repair job (prompt + context → diff →
+- [x] `CodegenProvider` — run a codegen/repair job (prompt + context → diff →
       commit(s) → build/deploy result), expose the repair loop entry point.
 
 ### 1.4 Application contracts
 
-- [ ] **Extension hooks** (`src/domain/` or `src/hooks/`): typed registration
+- [x] **Extension hooks** (`src/domain/` or `src/hooks/`): typed registration
       descriptors for menus, routes/views, panels, widgets, and data sources;
       include a contract version constant.
-- [ ] **Operate tools**: typed, discoverable action descriptors (name, Zod
+- [x] **Operate tools**: typed, discoverable action descriptors (name, Zod
       params schema, side-effect classification) the assistant can invoke.
-- [ ] **Shell ↔ app bridge** (`src/bridge/`): Zod-validated `postMessage`
+- [x] **Shell ↔ app bridge** (`src/bridge/`): Zod-validated `postMessage`
       message union — lifecycle (`ready`, `heartbeat`), navigation, error
       reporting (build vs. runtime), Operate dispatch, recovery commands — with
       strict origin-check helpers/typing for both directions.
-- [ ] **Vendor app manifest** (`src/manifest/`): Zod schema for base library
+- [x] **Vendor app manifest** (`src/manifest/`): Zod schema for base library
       coordinates, vendor backend endpoints, hook contract version, registry/
       library policy, resource limits, recovery options, template repository
       coordinates + template version, and stack-template + agent-instructions
       references.
-- [ ] **Codegen job protocol** (`src/dto/`, `src/endpoints/`, `src/events/`):
+- [x] **Codegen job protocol** (`src/dto/`, `src/endpoints/`, `src/events/`):
       request/result DTOs and the step events (planned diff → commit → build →
       deploy), each step recorded and revertible.
 
 ### 1.5 Wire contracts & barrel
 
-- [ ] Define REST/WS endpoint path constants + request/response Zod schemas in
+- [x] Define REST/WS endpoint path constants + request/response Zod schemas in
       `src/endpoints/` for the control-plane API the Shell and sandboxes call.
-- [ ] Define WS/event payload schemas in `src/events/` (session/sandbox/job/
+- [x] Define WS/event payload schemas in `src/events/` (session/sandbox/job/
       recovery state changes).
-- [ ] Re-export every public type, schema, and constant from
+- [x] Re-export every public type, schema, and constant from
       `packages/core/src/index.ts`; ensure JSDoc on all public surfaces.
-- [ ] Run `pnpm build` + `pnpm lint:fix`; commit: "Define core contracts: domain
+- [x] Run `pnpm build` + `pnpm lint:fix`; commit: "Define core contracts: domain
       model, providers, and application contracts."
 
 ---
