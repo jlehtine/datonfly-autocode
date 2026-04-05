@@ -165,8 +165,9 @@ templates implement. (Concrete TypeScript definitions live in the framework's
 - **Shell ↔ application bridge** — the `postMessage` protocol described above.
 - **Vendor application manifest** — declares the base library coordinates,
   vendor backend endpoints, hook contract version, registry/library policy,
-  resource limits, recovery options, and a reference to the stack template and
-  agent instructions.
+  resource limits, recovery options, the template repository coordinates and the
+  workspace's template version, and a reference to the stack template and agent
+  instructions.
 - **Codegen job protocol** — prompt and curated context in, planned diff →
   commit(s) → build result → deploy result out, with every step recorded and
   revertible.
@@ -193,9 +194,67 @@ templates implement. (Concrete TypeScript definitions live in the framework's
 
 ## 8. Versioning and per-user Git workflow
 
-- A user workspace repository is seeded from the application's **stack
-  template**, which imports the vendor base library and the application SDK with
-  empty hook registrations.
+### 8.1 Application template repository
+
+Each `Application` is backed by an **application template repository** — a
+per-application Git repository (hosted on the framework's Forgejo instance)
+produced by instantiating a **stack template** for that application's base
+library coordinates, vendor backend endpoints, hook contract version, and
+registry/library policy.
+
+- A user workspace is created by **cloning the template repository**, which
+  keeps the template as an `upstream` remote so later template versions can be
+  pulled into existing workspaces (see §8.3).
+- An **unmodified clone is the vanilla application** — the standard application
+  without customizations. Its initial commit is tagged as the workspace's first
+  Revision, giving recovery and revert a stable baseline that is a real,
+  buildable Revision rather than a special code path.
+- The base UI library is **referenced through the controlled registry** (a
+  pinned version), never vendored into the repository. The workspace holds hook
+  registrations and generated extensions, preserving the "extend, never fork"
+  rule.
+
+### 8.2 Framework-owned vs. application-owned partition
+
+The workspace is partitioned into two areas so that template updates and user
+customization do not collide:
+
+- **Framework-owned area** (a managed directory) — agent instructions, build and
+  deployment recipes, upgrade/migration scripts, and base scaffolding. Never
+  written by the user or the codegen agent; replaced wholesale on template
+  updates.
+- **Application-owned area** — hook registrations, generated extensions, and the
+  dependency manifest/lockfile. This is the only area the codegen agent
+  modifies.
+
+The partition is enforced by a **Git pre-commit hook** in the workspace
+repository that rejects any commit touching the framework-owned area, so the
+per-user codegen agent cannot modify it. (Server-side enforcement on Forgejo is
+a later hardening option.)
+
+### 8.3 Template updates for existing workspaces
+
+When an application template is updated, existing workspaces are upgraded as
+follows:
+
+- The workspace records the **template version** it was created from (in its
+  vendor application manifest).
+- **Simple updates** — framework-owned files that the user never edits — are
+  applied by replacing the framework-owned area from the new template version (a
+  pull/merge from `upstream`).
+- **Structural updates** — changes that must transform user content (renamed
+  hooks, changed config formats, moved API signatures) — are applied by running
+  the **versioned migration scripts** shipped in the framework-owned area, in
+  sequence from the workspace's recorded version to the target version (the same
+  approach as database schema migrations).
+- **Repair fallback.** If an update or migration leaves the workspace failing to
+  build, the failure is routed through the standard recovery loop (§9): the
+  codegen agent repairs it with the build diagnostics as context, behind a
+  health-gated deploy. The codegen agent is the escape hatch for cases that do
+  not update mechanically.
+
+### 8.4 Codegen and revision lifecycle
+
 - Each codegen job runs on a branch. On success, commits are integrated into the
   workspace's main line and tagged with a Revision id and the build artifact
   digest.
@@ -245,3 +304,11 @@ The **initial template targets the framework's own stack** (TypeScript / React +
 MUI / NestJS). Because the framework's contracts are stack-neutral, additional
 templates (for example, a Python stack) can be added without changing the
 control plane.
+
+A stack template is instantiated per `Application` into an **application
+template repository** (§8.1): the generic skeleton bound to that application's
+base-library coordinates, vendor endpoints, hook contract version, and registry
+policy. The build/deployment recipes, agent instructions, and migration scripts
+live in the repository's framework-owned area; only the stack toolchain (Node,
+pnpm, compilers) is baked into the codegen/build sandbox image, keeping per-app
+images light while builds stay reproducible from a Revision's commit.
