@@ -41,6 +41,23 @@ export const sessionWireSchema = z.object({
 /** A session parsed from its JSON wire representation. */
 export type SessionWire = z.infer<typeof sessionWireSchema>;
 
+// ─── Responses ───
+
+/**
+ * Response from starting a session: the started {@link SessionWire} together
+ * with the reachable base URL of its App Runtime workload, which the Shell
+ * points the application `<iframe>` at. The routing URL is carried on the
+ * response (not the persisted `Session` entity) because it is a property of the
+ * currently running workload, not of the durable session.
+ */
+export const startSessionResponseSchema = z.object({
+    session: sessionWireSchema,
+    appRuntimeUrl: z.string(),
+});
+
+/** Response from starting a session. */
+export type StartSessionResponse = z.infer<typeof startSessionResponseSchema>;
+
 // ─── Requests ───
 
 /** Body for provisioning a new per-user workspace. */

@@ -58,13 +58,19 @@ search configuration is needed).
    pnpm dev               # assistant backend + frontend; backend listens on port 3000
    ```
 
-3. **Run the empty reference application** (the application sub-frame), telling
-   it to accept the Shell origin:
+3. **Start the control-plane backend** (`packages/control-plane`). It drives the
+   Docker-backed orchestrator and the session lifecycle, so a running **Docker
+   daemon is required**. On boot it seeds a demo workspace and, when a session
+   starts, launches the stub App Runtime container and reports its
+   `appRuntimeUrl` to the Shell.
 
    ```bash
-   # in datonfly-autocode
-   VITE_SHELL_ORIGIN=http://localhost:5274 pnpm --filter @datonfly-autocode/reference-empty-app dev
+   # in datonfly-autocode (Docker daemon must be running)
+   pnpm --filter @datonfly-autocode/control-plane dev
    ```
+
+   The backend listens on port 3100 (REST + Socket.io). Override with `PORT` and
+   the log level with `LOG_LEVEL` (set `LOG_FORMAT=json` for structured logs).
 
 4. **Run the Shell:**
 
@@ -72,6 +78,10 @@ search configuration is needed).
    pnpm --filter @datonfly-autocode/shell-ui dev
    ```
 
-   The Shell serves on port 5274, proxies the assistant API
-   (`/datonfly-assistant`, `/auth`) to the backend on port 3000, and loads the
-   empty app (`http://localhost:5273`) in the sandboxed sub-frame.
+   The Shell serves on port 5274 and proxies the assistant API
+   (`/datonfly-assistant`, `/auth`) to the backend on port 3000 and the
+   control-plane API (`/datonfly-autocode`, with `ws: true` for socket.io) to
+   the backend on port 3100. On load it starts a session for the seeded demo
+   workspace; the sandboxed sub-frame is pointed at the control plane's
+   `appRuntimeUrl` (the running stub container), so the standalone
+   `reference-empty-app` is not needed for the sub-frame in this slice.

@@ -480,19 +480,19 @@ Decisions for this slice (resolved with the user):
 
 ### 4.1 `core` routing addition
 
-- [ ] Add `endpoint: string` (reachable base URL after start) to
+- [x] Add `endpoint: string` (reachable base URL after start) to
       `WorkloadHandle` in `src/interfaces/sandbox.ts`.
-- [ ] Add a `startSessionResponseSchema` to `src/endpoints/schemas.ts` carrying
+- [x] Add a `startSessionResponseSchema` to `src/endpoints/schemas.ts` carrying
       the `Session` wire shape plus `appRuntimeUrl`; re-export it (and any new
       types) from the `core` barrel. Keep persisted entity schemas unchanged.
 
 ### 4.2 Docker sandbox provider (`packages/sandbox-docker`, `@datonfly-autocode/sandbox-docker`)
 
-- [ ] Scaffold the package mirroring `core`'s library setup (`package.json`,
+- [x] Scaffold the package mirroring `core`'s library setup (`package.json`,
       `tsconfig.json`, `tsc` build). Deps: `@datonfly-autocode/core`
       (`workspace:*`), `dockerode`. Dev: `typescript`, `vitest`,
       `@types/dockerode`.
-- [ ] `DockerSandboxProvider` implementing the `core` `SandboxProvider` against
+- [x] `DockerSandboxProvider` implementing the `core` `SandboxProvider` against
       the local Docker daemon (default socket): `createNamespace` → a
       per-workspace Docker network (best-effort); `startWorkload` → run the stub
       image with a published port and return a `WorkloadHandle` whose `endpoint`
@@ -500,15 +500,15 @@ Decisions for this slice (resolved with the user):
       `checkHealth` → an HTTP/inspect probe; `streamLogs` → container logs as an
       `AsyncIterable<string>`. `egressAllowList` and resource quotas are
       documented no-ops this slice.
-- [ ] **Integration smoke test** (Vitest, requires Docker): start the stub,
+- [x] **Integration smoke test** (Vitest, requires Docker): start the stub,
       `checkHealth` returns healthy, logs yield at least one line, stop cleans
       up. Skipped automatically when Docker is unavailable.
 
 ### 4.3 Orchestrator (`packages/orchestrator`, `@datonfly-autocode/orchestrator`)
 
-- [ ] Scaffold the package mirroring `core`'s library setup. Deps:
+- [x] Scaffold the package mirroring `core`'s library setup. Deps:
       `@datonfly-autocode/core` (`workspace:*`). Dev: `typescript`, `vitest`.
-- [ ] `createOrchestrator` implementing the `core` `Orchestrator` over an
+- [x] `createOrchestrator` implementing the `core` `Orchestrator` over an
       in-memory store (workspaces / sessions / deployments) and an injected
       `SandboxProvider` + event sink:
   - `provisionWorkspace` → record an in-memory `UserWorkspace`.
@@ -520,44 +520,43 @@ Decisions for this slice (resolved with the user):
   - `reportBuildFailure` / `reportRuntimeFailure` / `recover` → recovery
     state-machine transitions and `recovery-state-changed` events only (no real
     build / codegen this slice).
-- [ ] **Unit tests** (Vitest) with a **fake** `SandboxProvider` (no Docker):
-      session lifecycle, emitted events, and recovery-state transitions.
+- [x] **Unit tests** (Vitest) with a **fake** `SandboxProvider` (no Docker):
 
 ### 4.4 Control-plane backend (`packages/control-plane`, `@datonfly-autocode/control-plane`)
 
-- [ ] Scaffold a NestJS service mirroring the sibling `datonfly-assistant`
+- [x] Scaffold a NestJS service mirroring the sibling `datonfly-assistant`
       backend conventions (NestJS 11, `nestjs-pino`, Socket.io, ESM + Node16,
       `tsc` build). Deps: `@datonfly-autocode/core`,
       `@datonfly-autocode/orchestrator`, `@datonfly-autocode/sandbox-docker`
       (all `workspace:*`), plus the Nest/runtime deps.
-- [ ] REST controllers on the `core` endpoint paths (`WORKSPACES_PATH`,
+- [x] REST controllers on the `core` endpoint paths (`WORKSPACES_PATH`,
       `SESSIONS_PATH`, `sessionRecoveryPath`, …) and a Socket.io gateway at
       `WS_PATH` emitting the `controlPlaneEvent` union from the orchestrator's
       event sink.
-- [ ] Wire the orchestrator + `DockerSandboxProvider`; seed one demo
+- [x] Wire the orchestrator + `DockerSandboxProvider`; seed one demo
       `Application` + `UserWorkspace` in the in-memory store at boot. Dev port
       **3100**.
 
 ### 4.5 Shell wiring (`packages/shell-ui`)
 
-- [ ] Add a control-plane client: REST (start / end session, recovery) +
+- [x] Add a control-plane client: REST (start / end session, recovery) +
       Socket.io subscription to the `controlPlaneEvent` union.
-- [ ] `useControlPlaneSession`: start a session for the seeded demo workspace
+- [x] `useControlPlaneSession`: start a session for the seeded demo workspace
       and expose its status + `appRuntimeUrl`.
-- [ ] Point `AppFrame`'s `<iframe>` `src` at `appRuntimeUrl` (the running stub
+- [x] Point `AppFrame`'s `<iframe>` `src` at `appRuntimeUrl` (the running stub
       container); the bridge host stays wired but is inert against the stub.
-- [ ] Drive `SessionPanel` from control-plane session/sandbox state (supersedes
+- [x] Drive `SessionPanel` from control-plane session/sandbox state (supersedes
       the Phase 3 bridge-derived status in this view); `RecoveryPanel` →
       `POST sessionRecoveryPath` (state transition only this slice).
-- [ ] `vite.config.ts`: add a `/datonfly-autocode` proxy (with `ws: true` for
+- [x] `vite.config.ts`: add a `/datonfly-autocode` proxy (with `ws: true` for
       socket.io) → `http://localhost:3100`.
 
 ### 4.6 Dev wiring & verification
 
-- [ ] Document running the control-plane backend in `INSTALL.md` (Docker daemon
+- [x] Document running the control-plane backend in `INSTALL.md` (Docker daemon
       required; backend on port 3100; the seeded demo workspace) alongside the
       existing Shell + assistant setup.
-- [ ] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+- [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
       `pnpm format:check`, the orchestrator unit tests, and the `sandbox-docker`
       smoke test (with Docker) pass.
 - [ ] Manual smoke check: with Docker + the backend up, `POST` a session →
@@ -565,7 +564,7 @@ Decisions for this slice (resolved with the user):
       container; WS emits session/sandbox events; the Shell moves `starting` →
       `active` and the `<iframe>` loads the stub; ending the session stops the
       container.
-- [ ] Commit: "Add the control plane with a Docker-backed orchestrator and
+- [x] Commit: "Add the control plane with a Docker-backed orchestrator and
       session lifecycle."
 
 ### Deferred to a later slice

@@ -1,30 +1,34 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 
-import type { AppSessionState, AppSessionStatus } from "../session/useAppSession.js";
+import type { ControlPlaneSessionState, ControlPlaneStatus } from "../control-plane/useControlPlaneSession.js";
 
 /** Props for {@link SessionPanel}. */
 export interface SessionPanelProps {
-    /** Current bridge-derived session state. */
-    state: AppSessionState;
+    /** Current control-plane session state. */
+    state: ControlPlaneSessionState;
 }
 
-const STATUS_COLOR: Record<AppSessionStatus, "default" | "success" | "warning" | "error"> = {
-    connecting: "default",
-    live: "success",
-    stalled: "warning",
-    errored: "error",
+const STATUS_COLOR: Record<ControlPlaneStatus, "default" | "info" | "success" | "warning" | "error"> = {
+    initializing: "default",
+    starting: "info",
+    active: "success",
+    idle: "warning",
+    expired: "default",
+    error: "error",
 };
 
-const STATUS_LABEL: Record<AppSessionStatus, string> = {
-    connecting: "Connecting",
-    live: "Live",
-    stalled: "Stalled",
-    errored: "Errored",
+const STATUS_LABEL: Record<ControlPlaneStatus, string> = {
+    initializing: "Initializing",
+    starting: "Starting",
+    active: "Active",
+    idle: "Idle",
+    expired: "Expired",
+    error: "Error",
 };
 
-/** Display the bridge-derived session status, location, and latest failure. */
+/** Display the control-plane session status, recovery state, and runtime URL. */
 export function SessionPanel({ state }: SessionPanelProps): React.JSX.Element {
-    const { status, hookContractVersion, currentPath, buildError, runtimeError } = state;
+    const { status, recoveryState, appRuntimeUrl, error } = state;
 
     return (
         <Stack spacing={1} sx={{ p: 2 }}>
@@ -33,22 +37,15 @@ export function SessionPanel({ state }: SessionPanelProps): React.JSX.Element {
                 <Chip size="small" color={STATUS_COLOR[status]} label={STATUS_LABEL[status]} />
             </Stack>
             <Typography variant="body2" color="text.secondary">
-                Hook contract: {hookContractVersion ?? "—"}
+                Recovery: {recoveryState ?? "—"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-                Path: {currentPath ?? "—"}
+                App Runtime: {appRuntimeUrl ?? "—"}
             </Typography>
-            {buildError !== undefined && (
+            {error !== undefined && (
                 <Box>
                     <Typography variant="body2" color="error.main">
-                        Build error: {buildError}
-                    </Typography>
-                </Box>
-            )}
-            {runtimeError !== undefined && (
-                <Box>
-                    <Typography variant="body2" color="error.main">
-                        Runtime error: {runtimeError.message}
+                        Error: {error}
                     </Typography>
                 </Box>
             )}

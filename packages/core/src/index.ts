@@ -163,6 +163,7 @@ export {
 export {
     API_PREFIX,
     WS_PATH,
+    CONTROL_PLANE_EVENT_CHANNEL,
     APPLICATIONS_PATH,
     applicationPath,
     WORKSPACES_PATH,
@@ -180,6 +181,7 @@ export {
 export type {
     WorkspaceWire,
     SessionWire,
+    StartSessionResponse,
     ProvisionWorkspaceRequest,
     StartSessionRequest,
     RecoveryRequest,
@@ -189,6 +191,7 @@ export type {
 export {
     workspaceWireSchema,
     sessionWireSchema,
+    startSessionResponseSchema,
     provisionWorkspaceRequestSchema,
     startSessionRequestSchema,
     recoveryRequestSchema,

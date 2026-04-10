@@ -4,6 +4,9 @@ export const API_PREFIX = "/datonfly-autocode";
 /** Socket.io transport path for control-plane events. */
 export const WS_PATH = `${API_PREFIX}/socket.io`;
 
+/** Socket.io channel every control-plane → Shell event is broadcast on. */
+export const CONTROL_PLANE_EVENT_CHANNEL = "controlPlaneEvent";
+
 /** Path for the applications collection. */
 export const APPLICATIONS_PATH = `${API_PREFIX}/applications`;
 

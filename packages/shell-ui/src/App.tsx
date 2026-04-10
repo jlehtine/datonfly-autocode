@@ -1,37 +1,55 @@
 import { Box, createTheme, CssBaseline, Divider, ThemeProvider, Typography, useMediaQuery } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
 
+import type { RecoveryChoice } from "@datonfly-autocode/core";
+
 import type { BridgeHost } from "./bridge/host.js";
 import { AppFrame } from "./components/AppFrame.js";
 import { ChatPanel } from "./components/ChatPanel.js";
 import { RecoveryPanel } from "./components/RecoveryPanel.js";
 import { SessionPanel } from "./components/SessionPanel.js";
+import { useControlPlaneSession } from "./control-plane/useControlPlaneSession.js";
 import { useAppSession } from "./session/useAppSession.js";
 
-const DEFAULT_APP_FRAME_ORIGIN = "http://localhost:5273";
-
-function resolveAppFrame(): { appUrl: string; appOrigin: string } {
-    const appOrigin = import.meta.env.VITE_APP_FRAME_ORIGIN ?? DEFAULT_APP_FRAME_ORIGIN;
-    const appUrl = import.meta.env.VITE_APP_FRAME_URL ?? appOrigin;
-    return { appUrl, appOrigin };
+/** Derive the application sub-frame origin from its runtime URL for bridge validation. */
+function originOf(url: string | undefined): string {
+    if (!url) {
+        return "";
+    }
+    try {
+        return new URL(url).origin;
+    } catch {
+        return "";
+    }
 }
 
 /**
  * The framework Shell top frame.
  *
- * Hosts the assistant chat, the sandboxed application sub-frame, and the
- * bridge-derived session and recovery panels.
+ * Hosts the assistant chat, the sandboxed application sub-frame pointed at the
+ * control plane's App Runtime URL, and the control-plane session and recovery
+ * panels. The bridge host stays wired to the sub-frame but is inert against the
+ * stub workload this slice.
  */
 export function App(): React.JSX.Element {
     const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
     const theme = useMemo(() => createTheme({ palette: { mode: prefersDark ? "dark" : "light" } }), [prefersDark]);
 
-    const { state, callbacks } = useAppSession();
+    const { state: sessionState, recover } = useControlPlaneSession();
+    const { callbacks } = useAppSession();
     const [host, setHost] = useState<BridgeHost | null>(null);
     const onHost = useCallback((next: BridgeHost | null) => {
         setHost(next);
     }, []);
-    const { appUrl, appOrigin } = useMemo(() => resolveAppFrame(), []);
+    const onRecover = useCallback(
+        (choice: RecoveryChoice) => {
+            void recover(choice);
+        },
+        [recover],
+    );
+
+    const appUrl = sessionState.appRuntimeUrl ?? "";
+    const appOrigin = useMemo(() => originOf(sessionState.appRuntimeUrl), [sessionState.appRuntimeUrl]);
 
     return (
         <ThemeProvider theme={theme}>
@@ -60,8 +78,8 @@ export function App(): React.JSX.Element {
                     <AppFrame appUrl={appUrl} appOrigin={appOrigin} callbacks={callbacks} onHost={onHost} />
                     <Divider />
                     <Box sx={{ display: "flex", flexWrap: "wrap" }}>
-                        <SessionPanel state={state} />
-                        <RecoveryPanel host={host} />
+                        <SessionPanel state={sessionState} />
+                        <RecoveryPanel host={host} onRecover={onRecover} />
                     </Box>
                 </Box>
             </Box>

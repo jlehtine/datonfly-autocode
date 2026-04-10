@@ -50,6 +50,8 @@ export interface WorkloadHandle {
     kind: SandboxWorkloadKind;
     /** Provider-specific workload name (e.g. pod name). */
     name: string;
+    /** Reachable base URL of the workload once started (e.g. its published port). */
+    endpoint: string;
 }
 
 /** Health of a running workload. */

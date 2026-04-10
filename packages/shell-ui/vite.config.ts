@@ -5,6 +5,10 @@ import { defineConfig } from "vite";
 // proxies the assistant API paths to it so the chat shares the Shell's origin.
 const ASSISTANT_BACKEND_TARGET = "http://localhost:3000";
 
+// Control-plane backend (REST + Socket.io). The Shell proxies its API paths so
+// the control-plane client and event socket share the Shell's origin.
+const CONTROL_PLANE_TARGET = "http://localhost:3100";
+
 export default defineConfig({
     plugins: [react()],
     // The assistant chat packages are consumed as `link:` dependencies, so they
@@ -19,6 +23,11 @@ export default defineConfig({
         proxy: {
             "/datonfly-assistant": {
                 target: ASSISTANT_BACKEND_TARGET,
+                ws: true,
+                changeOrigin: true,
+            },
+            "/datonfly-autocode": {
+                target: CONTROL_PLANE_TARGET,
                 ws: true,
                 changeOrigin: true,
             },
