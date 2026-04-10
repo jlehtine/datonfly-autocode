@@ -314,11 +314,128 @@ Decisions for this slice (resolved with the user):
 
 ---
 
+## Phase 3 — Frontend Shell
+
+First slice of the framework **Shell**: a Vite/React/MUI top frame that hosts
+the per-user application in a sandboxed `<iframe>`, drives it over the typed
+Shell-side bridge, derives session status and a recovery panel from bridge
+traffic, and embeds a working assistant chat. The chat is functional end-to-end
+but **not yet bound** to the application or a control plane.
+
+Decisions for this slice (resolved with the user):
+
+- **Bridge-only (no control plane).** This slice does not call the Orchestrator
+  or any control-plane REST/WS API, and does not subscribe to `core` events.
+  Session status is derived purely from bridge traffic (`ready` + `heartbeat`
+  timing, last `navigated`, last build/runtime error). The recovery panel sends
+  `recovery-command` over the bridge. Control-plane wiring lands in Phase 4.
+- **Bridge host in `shell-ui` (not `app-sdk`).** The Shell-side host is the
+  mirror of `app-sdk`'s `createBridgeClient` and lives in `shell-ui`, keeping
+  `app-sdk` strictly application-side. The wire contract stays single-sourced in
+  `core` (both sides import `parseAppToShellMessage` / `parseShellToAppMessage`
+  and the message schemas); only the thin transport wrapper differs.
+- **Real assistant chat, unbound.** The chat embeds the actual
+  `@datonfly-assistant` chat components against the actual assistant backend,
+  but is not wired to control the application or orchestrator yet.
+- **Consume assistant packages via local link.** `@datonfly-assistant/core`,
+  `chat-client`, and `chat-ui-mui` are consumed as `link:` dependencies on the
+  sibling `../datonfly-assistant` workspace (which must be built first). This is
+  a temporary dev-only arrangement; a published/registry approach comes later.
+- **Assistant runs from its own stack.** The assistant backend runs from the
+  sibling repo with its normal dev setup (`docker compose up -d` + `pnpm dev`);
+  the Shell proxies the assistant API to it. No autocode-side Postgres or extra
+  backend configuration is needed for this slice.
+- **Single hard-coded dev session.** No workspace provisioning or selection UI —
+  the Shell embeds the Phase 2 `reference-app/empty` as the one dev session.
+
+### 3.1 `shell-ui` scaffold (`packages/shell-ui`, `@datonfly-autocode/shell-ui`)
+
+- [x] Scaffold the Vite app: `package.json` (`@datonfly-autocode/shell-ui`,
+      private), `index.html`, `vite.config.ts`, `tsconfig.json`,
+      `vite-env.d.ts`, `src/main.tsx`. Deps: `@datonfly-autocode/core`
+      (`workspace:*`), `react`, `react-dom`, `@mui/material`, `@emotion/react`,
+      `@emotion/styled`, and `link:`-linked `@datonfly-assistant/core`,
+      `@datonfly-assistant/chat-client`, `@datonfly-assistant/chat-ui-mui`. Dev:
+      `vite`, `@vitejs/plugin-react`, `vitest`, `typescript`, `@types/react`,
+      `@types/react-dom`.
+- [x] Add `shell-ui` to the root `tsconfig.json` references (the `packages/*`
+      workspace glob already covers it).
+
+### 3.2 Shell-side bridge host (`src/bridge/host.ts`)
+
+- [x] `createBridgeHost` — the mirror of `app-sdk`'s `createBridgeClient`:
+      installs an origin-checked `message` listener (via
+      `parseAppToShellMessage`) routing `ready` / `heartbeat` / `navigated` /
+      `build-error` / `runtime-error` / `operate-result` to callbacks, and
+      exposes typed senders (`sendNavigate`, `sendOperateDispatch`,
+      `sendRecoveryCommand`) plus `dispose`. The event source and target window
+      are injectable for testing.
+- [x] **Unit tests** (Vitest): wrong-origin rejection, inbound routing, sender
+      payload shape, and `dispose` stops listening.
+
+### 3.3 Session state + sub-frame host
+
+- [x] `src/session/useAppSession.ts`: a reducer/hook deriving a session status
+      (`connecting` → `live` → `stalled` / `errored`) from `ready` + heartbeat
+      timing, tracking the last navigated path and the last build/runtime error.
+      Unit-tested with Vitest (pure reducer).
+- [x] `src/components/AppFrame.tsx`: a sandboxed `<iframe>` loading
+      `reference-app/empty`, wiring the bridge host to the frame window and the
+      expected application origin.
+- [x] `src/components/SessionPanel.tsx`: shows the derived status, last
+      navigated path, and last error summary.
+- [x] `src/components/RecoveryPanel.tsx`: `auto_repair` / `revert` / `vanilla`
+      actions dispatched via `host.sendRecoveryCommand` (bridge-only; does not
+      yet trigger a real rebuild).
+
+### 3.4 Assistant chat + layout
+
+- [x] `src/components/ChatPanel.tsx`: embed the assistant `ChatHistoryEmbed`
+      (config `url = window.location.origin`, proxied to the assistant backend).
+      Working chat, not wired to the application.
+- [x] `src/App.tsx`: compose the chat region, `AppFrame`, and the session and
+      recovery panels under a MUI `ThemeProvider` + `CssBaseline`.
+
+### 3.5 Dev wiring (temporary)
+
+- [x] `shell-ui` `vite.config.ts`: dev port 5274; proxy `/datonfly-assistant`
+      (with `ws: true`) and `/auth` to `http://localhost:3000`; derive the
+      application-frame origin from `VITE_APP_FRAME_ORIGIN` (default
+      `http://localhost:5273`).
+- [x] Set `VITE_SHELL_ORIGIN=http://localhost:5274` for the
+      `reference-app/empty` dev server so its bootstrap accepts the Shell
+      origin.
+- [x] Document the temporary chat dev setup in `INSTALL.md`: build the sibling
+      `datonfly-assistant` first, run the assistant from the sibling repo with
+      its normal dev setup (`docker compose up -d` + `pnpm dev`), then run the
+      `reference-app/empty` and the Shell.
+
+### 3.6 Wiring & verification
+
+- [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+      `pnpm format:check`, and the `shell-ui` tests pass.
+- [x] Manual smoke check: the empty app loads in the iframe; `ready` /
+      `heartbeat` move `SessionPanel` to "live"; recovery buttons post commands;
+      the chat round-trips against the assistant backend.
+- [x] Commit: "Add the Shell with a sandboxed application frame and assistant
+      chat."
+
+### Deferred to a later slice
+
+- [ ] Bind the chat/assistant to the application: Operate dispatch and the
+      repair conversation driving the sub-frame over the bridge (lands with
+      codegen / recovery, Phase 6–7).
+- [ ] Replace the bridge-derived session view with real control-plane session
+      lifecycle, deployment routing, and event subscriptions (Phase 4).
+- [ ] Workspace provisioning / selection UI (Phase 4–5).
+- [ ] Replace the cross-repo `link:` chat dependencies with a published/registry
+      consumption model, and fold the assistant backend into the real
+      orchestrated dev/deploy setup.
+
+---
+
 ## Later phases (coarse — expand when reached)
 
-- [ ] **Phase 3 — Shell** (`packages/shell-ui`): top-frame Shell, sandboxed
-      sub-frame host, embedded assistant chat, session control, recovery panel,
-      typed `postMessage` bridge.
 - [ ] **Phase 4 — Orchestrator + sandbox provider** (`packages/orchestrator`,
       `packages/sandbox-k8s`): local Docker provider first, then Kubernetes with
       NetworkPolicies/quotas; session-driven start/stop. Dev/e2e cluster is

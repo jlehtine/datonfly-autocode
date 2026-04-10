@@ -1,4 +1,9 @@
 {
     "files": [],
-    "references": [{ "path": "./packages/core" }, { "path": "./packages/app-sdk" }, { "path": "./reference-app/empty" }]
+    "references": [
+        { "path": "./packages/core" },
+        { "path": "./packages/app-sdk" },
+        { "path": "./packages/shell-ui" },
+        { "path": "./reference-app/empty" }
+    ]
 }
