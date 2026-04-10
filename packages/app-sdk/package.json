@@ -1,0 +1,38 @@
+{
+    "name": "@datonfly-autocode/app-sdk",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "clean": "rm -rf dist",
+        "build": "tsc --project tsconfig.build.json",
+        "dev": "tsc --watch --project tsconfig.build.json",
+        "test": "vitest run",
+        "lint": "eslint src/",
+        "lint:fix": "eslint src/ --fix"
+    },
+    "dependencies": {
+        "@datonfly-autocode/core": "workspace:*",
+        "zod": "^4.3.6"
+    },
+    "peerDependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "typescript": "^6.0.2",
+        "vitest": "^4.1.2"
+    }
+}

@@ -216,23 +216,101 @@ are swappable (ARCHITECTURE §4, CONVENTIONS "Pluggable providers").
 
 ---
 
-## Phase 2 — Reference vendor app + app-sdk (entry point)
+## Phase 2 — `app-sdk` + empty reference app
 
-First slice only; full work expanded once Phase 1 lands.
+First slice: the framework `app-sdk` and a minimal **empty** reference
+application used to test codegen **from scratch**. A content-ful reference
+vendor app (existing hooks, Operate tools, a backend) is deferred to a later
+slice once this one lands.
 
-- [ ] Scaffold `packages/app-sdk/` (`@datonfly-autocode/app-sdk`): implements
-      the bridge client, hook registries, and Operate-tool registration against
-      the `core` contracts. React/MUI peer.
-- [ ] Scaffold `packages/reference-vendor-app/`: minimal UI base library + small
+Decisions for this slice (resolved with the user):
+
+- **Placement.** The reference app lives in a top-level `reference-app/` tree
+  (not under `packages/`), with the empty app at `reference-app/empty/`. It is a
+  pnpm workspace member so it can link `app-sdk` via `workspace:*` during
+  development. Conceptually it is an _application_ (it follows its own stack's
+  conventions, not the framework's), and its directory is the literal content of
+  a future application template repository.
+- **Template repo model.** The `reference-app/empty/` directory is the
+  **in-monorepo seed** for the application template repository. The Forgejo
+  template repo is a _derived artifact_: a Phase 5 seeding step pushes this
+  directory's content, tags the vanilla baseline, and installs the pre-commit
+  hook. The monorepo directory stays the single source of truth; no separate Git
+  repo and no Forgejo work in this phase.
+- **Single package.** The empty app is a single application package with no
+  separate vendor base library (there is no vendor content yet). Codegen fills
+  the application-owned area later.
+- **Root render.** Modeled as an `app-sdk` bootstrap/registration concern, not a
+  new `core` hook kind — no change to the `core` `ExtensionHook` union.
+- **Partition deferred.** The framework-owned vs. application-owned directory
+  partition and the pre-commit hook are deferred to Phase 5/6 (when workspace
+  provisioning and codegen are wired). The `app-sdk` dependency is authored as
+  `workspace:*`; the Phase 5 seeding step rewrites it to a pinned controlled-
+  registry version when materializing the template repo.
+
+### 2.1 `app-sdk` (`packages/app-sdk`, `@datonfly-autocode/app-sdk`)
+
+- [x] Scaffold the package mirroring `core`'s library setup (`package.json`,
+      `tsconfig.json` extending the base with `jsx: react-jsx` + DOM libs, a
+      `tsconfig.build.json` that excludes tests, `tsc` build). Deps: `core`
+      (`workspace:*`), `zod`. Peers: `react`, `react-dom`. Dev: `typescript`,
+      `vitest`, `@types/react`, `@types/react-dom`.
+- [x] **Bridge client** (`src/bridge/client.ts`): `createBridgeClient` that
+      installs an origin-checked `message` listener (via
+      `parseShellToAppMessage`) routing `navigate` / `operate-dispatch` /
+      `recovery-command` to callbacks, and exposes typed senders (`sendReady`,
+      `sendHeartbeat`, `sendNavigated`, `sendBuildError`, `sendRuntimeError`,
+      `sendOperateResult`) plus `dispose`. The event source and target window
+      are injectable for testing.
+- [x] **Hook registry** (`src/hooks/registry.ts`): `createHookRegistry` with
+      `register` / `list` / `get`, deduplicating by hook `id`.
+- [x] **Operate registry** (`src/operate/registry.ts`): `createOperateRegistry`
+      with `register(tool, handler)` / `list` / `has` / `dispatch`, validating
+      raw parameters through the tool's Zod schema and returning an
+      `operate-result`-shaped outcome.
+- [x] **Root bootstrap** (`src/root/bootstrap.ts`): `bootstrap` that renders the
+      application root with `react-dom/client`, wires the bridge (operate
+      dispatch → registry → `sendOperateResult`; navigation/recovery callbacks),
+      installs global `error` / `unhandledrejection` handlers reporting via
+      `sendRuntimeError`, sends `ready` with the hook contract version after
+      mount, and starts the heartbeat. Returns a disposable handle.
+- [x] **Barrel** (`src/index.ts`): re-export the public API with JSDoc.
+- [x] **Unit tests** (Vitest): bridge origin rejection + send payload shape,
+      hook-registry dedupe, and Operate `dispatch` parameter validation.
+
+### 2.2 Empty reference app (`reference-app/empty/`)
+
+- [x] Scaffold the Vite app: `package.json`
+      (`@datonfly-autocode/reference-empty-app`, private), `index.html`,
+      `vite.config.ts`, `tsconfig.json`, `vite-env.d.ts`. Deps: `app-sdk`
+      (`workspace:*`), `react`, `react-dom`, `@mui/material`, `@emotion/react`,
+      `@emotion/styled`. Dev: `vite`, `@vitejs/plugin-react`, `typescript`,
+      `@types/react`, `@types/react-dom`.
+- [x] `src/App.tsx`: an **empty placeholder** root (MUI `ThemeProvider` +
+      `CssBaseline`, no content) — the application-owned root the codegen agent
+      fills in later.
+- [x] `src/main.tsx`: mount via the `app-sdk` `bootstrap`, deriving the Shell
+      origin from a Vite env var.
+- [x] `src/manifest.ts`: a minimal, schema-validated `VendorAppManifest` sample
+      for the empty app (exercises the manifest contract).
+
+### 2.3 Wiring
+
+- [x] Add `reference-app/*` to `pnpm-workspace.yaml`; add `app-sdk` and
+      `reference-app/empty` to the root `tsconfig.json` references. (Turbo tasks
+      are generic; no `turbo.json` change needed.)
+- [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+      `pnpm format:check`, and the `app-sdk` tests pass.
+- [x] Commit: "Add the app-sdk and an empty reference application."
+
+### Deferred to a later slice
+
+- [ ] Content-ful **reference vendor app**: minimal UI base library + small
       backend exercising at least one extension hook and one Operate tool.
-- [ ] Provide the reference app's **application template repository** layout:
-      the framework-owned area (agent instructions, build/deploy recipes,
-      migration scripts, base scaffolding) plus the application-owned area (hook
-      registrations, generated extensions, dependency manifest), and a
-      pre-commit hook rejecting commits to the framework-owned area. The initial
-      commit is the tagged vanilla baseline.
-- [ ] Wire both into `pnpm-workspace.yaml`, root `tsconfig.json` references, and
-      Turbo build graph.
+- [ ] Application **template repository** partition (framework-owned vs.
+      application-owned areas) + the pre-commit hook rejecting commits to the
+      framework-owned area, plus the tagged vanilla baseline — landed alongside
+      Forgejo/`RepoProvider` (Phase 5) and codegen (Phase 6).
 
 ---
 
