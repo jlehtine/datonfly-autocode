@@ -425,24 +425,164 @@ Decisions for this slice (resolved with the user):
 - [ ] Bind the chat/assistant to the application: Operate dispatch and the
       repair conversation driving the sub-frame over the bridge (lands with
       codegen / recovery, Phase 6–7).
-- [ ] Replace the bridge-derived session view with real control-plane session
-      lifecycle, deployment routing, and event subscriptions (Phase 4).
-- [ ] Workspace provisioning / selection UI (Phase 4–5).
+- Replace the bridge-derived session view with real control-plane session
+  lifecycle, deployment routing, and event subscriptions — now planned in Phase
+  4 (§4.5).
+- [ ] Workspace provisioning / selection UI (Phase 5; Phase 4 still uses a
+      hard-coded seeded workspace).
 - [ ] Replace the cross-repo `link:` chat dependencies with a published/registry
       consumption model, and fold the assistant backend into the real
       orchestrated dev/deploy setup.
 
 ---
 
+## Phase 4 — Orchestrator + Docker sandbox (vertical slice)
+
+First slice of the **control plane**: a working `Orchestrator` driving a
+**Docker** sandbox provider, fronted by a NestJS control-plane backend, and
+wired into the Shell. The goal is to prove the lifecycle end-to-end — the Shell
+starts a real session → the Orchestrator provisions and starts a per-workspace
+container → the Shell routes the application `<iframe>` to that running
+container and reflects control-plane session/sandbox state from live events.
+This is a **proof-of-concept**: Kubernetes, real build/deploy, and codegen come
+later, so the container runs a **stub web server**, not generated application
+code.
+
+Decisions for this slice (resolved with the user):
+
+- **Docker first (not Kubernetes).** The sandbox provider targets the local
+  Docker daemon via the **default socket**. The Kubernetes provider
+  (`sandbox-k8s`, NetworkPolicies/quotas, Kind + CNI) is a later slice.
+- **Full vertical slice.** Provider + Orchestrator + a NestJS control-plane
+  backend + Shell wiring, so the lifecycle is exercised end-to-end through the
+  real wire contracts — not just a library with unit tests.
+- **In-memory control-plane state.** Workspaces / sessions / deployments live in
+  an in-memory store this slice; a Postgres-backed control-plane store
+  (data-preserving migrations, per CONVENTIONS) is a later slice.
+- **Stub App Runtime container.** Since build/deploy (Phase 5) and codegen
+  (Phase 6) don't exist yet, the App Runtime container serves a **stub web
+  server** (e.g. `traefik/whoami`, image overridable) purely to prove lifecycle
+  / health / routing. `reference-app/empty` is **not** containerized. As a
+  result, the stub does not speak the Shell bridge, so the Shell's session view
+  is now driven by **control-plane status** (which supersedes the Phase 3
+  bridge-derived "live" indication in that panel).
+- **Security/isolation deferred.** Network isolation, egress allow-list,
+  resource quotas, dropped capabilities, and read-only rootfs are documented
+  no-ops / best-effort approximations this slice. Real enforcement lands with
+  the Kubernetes provider and the Phase 8 hardening.
+- **Minimal `core` routing addition.** The `core` `SandboxProvider` returns a
+  `WorkloadHandle` with no reachable URL, and neither `Session` nor `Deployment`
+  wire schemas carry a routing URL — so the Shell currently has no contract way
+  to learn where to point the `<iframe>`. This slice adds `endpoint` to
+  `WorkloadHandle` and an `appRuntimeUrl` field to a new **start-session
+  response** schema (the persisted `Session` / `Deployment` entities are left
+  unchanged).
+
+### 4.1 `core` routing addition
+
+- [ ] Add `endpoint: string` (reachable base URL after start) to
+      `WorkloadHandle` in `src/interfaces/sandbox.ts`.
+- [ ] Add a `startSessionResponseSchema` to `src/endpoints/schemas.ts` carrying
+      the `Session` wire shape plus `appRuntimeUrl`; re-export it (and any new
+      types) from the `core` barrel. Keep persisted entity schemas unchanged.
+
+### 4.2 Docker sandbox provider (`packages/sandbox-docker`, `@datonfly-autocode/sandbox-docker`)
+
+- [ ] Scaffold the package mirroring `core`'s library setup (`package.json`,
+      `tsconfig.json`, `tsc` build). Deps: `@datonfly-autocode/core`
+      (`workspace:*`), `dockerode`. Dev: `typescript`, `vitest`,
+      `@types/dockerode`.
+- [ ] `DockerSandboxProvider` implementing the `core` `SandboxProvider` against
+      the local Docker daemon (default socket): `createNamespace` → a
+      per-workspace Docker network (best-effort); `startWorkload` → run the stub
+      image with a published port and return a `WorkloadHandle` whose `endpoint`
+      is the reachable URL; `stopWorkload` / `scaleToZero` → stop/remove;
+      `checkHealth` → an HTTP/inspect probe; `streamLogs` → container logs as an
+      `AsyncIterable<string>`. `egressAllowList` and resource quotas are
+      documented no-ops this slice.
+- [ ] **Integration smoke test** (Vitest, requires Docker): start the stub,
+      `checkHealth` returns healthy, logs yield at least one line, stop cleans
+      up. Skipped automatically when Docker is unavailable.
+
+### 4.3 Orchestrator (`packages/orchestrator`, `@datonfly-autocode/orchestrator`)
+
+- [ ] Scaffold the package mirroring `core`'s library setup. Deps:
+      `@datonfly-autocode/core` (`workspace:*`). Dev: `typescript`, `vitest`.
+- [ ] `createOrchestrator` implementing the `core` `Orchestrator` over an
+      in-memory store (workspaces / sessions / deployments) and an injected
+      `SandboxProvider` + event sink:
+  - `provisionWorkspace` → record an in-memory `UserWorkspace`.
+  - `startSession` → `createNamespace` + `startWorkload("app-runtime", stub)` +
+    health gate → `active`; create the `Session` → `Deployment` link; emit
+    `sandbox-state-changed` + `session-state-changed`; surface the `endpoint` as
+    the session's `appRuntimeUrl`.
+  - `endSession` → `stopWorkload` + `scaleToZero`; emit the closing events.
+  - `reportBuildFailure` / `reportRuntimeFailure` / `recover` → recovery
+    state-machine transitions and `recovery-state-changed` events only (no real
+    build / codegen this slice).
+- [ ] **Unit tests** (Vitest) with a **fake** `SandboxProvider` (no Docker):
+      session lifecycle, emitted events, and recovery-state transitions.
+
+### 4.4 Control-plane backend (`packages/control-plane`, `@datonfly-autocode/control-plane`)
+
+- [ ] Scaffold a NestJS service mirroring the sibling `datonfly-assistant`
+      backend conventions (NestJS 11, `nestjs-pino`, Socket.io, ESM + Node16,
+      `tsc` build). Deps: `@datonfly-autocode/core`,
+      `@datonfly-autocode/orchestrator`, `@datonfly-autocode/sandbox-docker`
+      (all `workspace:*`), plus the Nest/runtime deps.
+- [ ] REST controllers on the `core` endpoint paths (`WORKSPACES_PATH`,
+      `SESSIONS_PATH`, `sessionRecoveryPath`, …) and a Socket.io gateway at
+      `WS_PATH` emitting the `controlPlaneEvent` union from the orchestrator's
+      event sink.
+- [ ] Wire the orchestrator + `DockerSandboxProvider`; seed one demo
+      `Application` + `UserWorkspace` in the in-memory store at boot. Dev port
+      **3100**.
+
+### 4.5 Shell wiring (`packages/shell-ui`)
+
+- [ ] Add a control-plane client: REST (start / end session, recovery) +
+      Socket.io subscription to the `controlPlaneEvent` union.
+- [ ] `useControlPlaneSession`: start a session for the seeded demo workspace
+      and expose its status + `appRuntimeUrl`.
+- [ ] Point `AppFrame`'s `<iframe>` `src` at `appRuntimeUrl` (the running stub
+      container); the bridge host stays wired but is inert against the stub.
+- [ ] Drive `SessionPanel` from control-plane session/sandbox state (supersedes
+      the Phase 3 bridge-derived status in this view); `RecoveryPanel` →
+      `POST sessionRecoveryPath` (state transition only this slice).
+- [ ] `vite.config.ts`: add a `/datonfly-autocode` proxy (with `ws: true` for
+      socket.io) → `http://localhost:3100`.
+
+### 4.6 Dev wiring & verification
+
+- [ ] Document running the control-plane backend in `INSTALL.md` (Docker daemon
+      required; backend on port 3100; the seeded demo workspace) alongside the
+      existing Shell + assistant setup.
+- [ ] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+      `pnpm format:check`, the orchestrator unit tests, and the `sandbox-docker`
+      smoke test (with Docker) pass.
+- [ ] Manual smoke check: with Docker + the backend up, `POST` a session →
+      response carries the session + `appRuntimeUrl`; `docker ps` shows the
+      container; WS emits session/sandbox events; the Shell moves `starting` →
+      `active` and the `<iframe>` loads the stub; ending the session stops the
+      container.
+- [ ] Commit: "Add the control plane with a Docker-backed orchestrator and
+      session lifecycle."
+
+### Deferred to a later slice
+
+- [ ] Postgres-backed control-plane persistence (data-preserving migrations).
+- [ ] Real network isolation, egress allow-list, resource quotas, and the
+      least-privilege container hardening.
+- [ ] Kubernetes provider (`sandbox-k8s`): namespace-per-user, NetworkPolicies,
+      quotas, Kind + policy-enforcing CNI.
+- [ ] Real build/deploy of an actual Revision into the App Runtime container
+      (Phase 5) and codegen-driven content (Phase 6), replacing the stub.
+- [ ] Workspace provisioning / selection UI (no hard-coded seeded workspace).
+
+---
+
 ## Later phases (coarse — expand when reached)
 
-- [ ] **Phase 4 — Orchestrator + sandbox provider** (`packages/orchestrator`,
-      `packages/sandbox-k8s`): local Docker provider first, then Kubernetes with
-      NetworkPolicies/quotas; session-driven start/stop. Dev/e2e cluster is
-      **Kind** with a policy-enforcing CNI (**Cilium** preferred, Calico
-      acceptable) so `NetworkPolicy` and isolation are actually enforced; the
-      same manifests target any full-featured managed or local cluster in
-      production. **Tenancy is namespace-per-user.**
 - [ ] **Phase 5 — Repo + build/deploy** (`packages/repo-git`,
       `packages/build-deploy`): deployment routing, health-gated deploys,
       revert. `RepoProvider` is pluggable; the initial implementation targets a
