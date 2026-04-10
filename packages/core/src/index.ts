@@ -82,6 +82,7 @@ export type {
     EgressRule,
     CreateNamespaceOptions,
     StartWorkloadOptions,
+    WorkloadMount,
     WorkloadHandle,
     WorkloadHealth,
     RepoProvider,
@@ -181,6 +182,8 @@ export {
 export type {
     WorkspaceWire,
     SessionWire,
+    RevisionWire,
+    DeploymentWire,
     StartSessionResponse,
     ProvisionWorkspaceRequest,
     StartSessionRequest,
@@ -191,6 +194,8 @@ export type {
 export {
     workspaceWireSchema,
     sessionWireSchema,
+    revisionWireSchema,
+    deploymentWireSchema,
     startSessionResponseSchema,
     provisionWorkspaceRequestSchema,
     startSessionRequestSchema,
@@ -206,5 +211,6 @@ export {
     sandboxStateChangedSchema,
     codegenJobProgressSchema,
     recoveryStateChangedSchema,
+    deploymentStateChangedSchema,
     controlPlaneEventSchema,
 } from "./events/index.js";

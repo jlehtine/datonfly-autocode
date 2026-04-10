@@ -38,8 +38,28 @@ export interface StartWorkloadOptions {
     kind: SandboxWorkloadKind;
     /** Container image to run. */
     image: string;
+    /**
+     * Optional instance discriminator distinguishing concurrent workloads of the
+     * same {@link kind} for a workspace (e.g. a deployment id). When provided,
+     * the provider gives the workload a distinct identity so a new instance can
+     * run alongside the one it supersedes during a health-gated deploy. When
+     * omitted, the provider replaces any existing workload of the same kind.
+     */
+    instanceId?: string | undefined;
     /** Environment variables for the workload. */
     env?: Record<string, string> | undefined;
+    /** Host paths to mount into the workload (e.g. a host-built artifact). */
+    mounts?: WorkloadMount[] | undefined;
+}
+
+/** A host path mounted into a running workload. */
+export interface WorkloadMount {
+    /** Absolute host path to mount. */
+    hostPath: string;
+    /** Absolute path the host path is mounted at inside the container. */
+    containerPath: string;
+    /** Whether the mount is read-only. Defaults to writable when omitted. */
+    readOnly?: boolean | undefined;
 }
 
 /** A handle to a running workload. */
@@ -48,6 +68,8 @@ export interface WorkloadHandle {
     workspaceId: WorkspaceId;
     /** Kind of workload. */
     kind: SandboxWorkloadKind;
+    /** Instance discriminator the workload was started with, if any. */
+    instanceId?: string | undefined;
     /** Provider-specific workload name (e.g. pod name). */
     name: string;
     /** Reachable base URL of the workload once started (e.g. its published port). */

@@ -580,18 +580,204 @@ Decisions for this slice (resolved with the user):
 
 ---
 
+## Phase 5 — Repo + build/deploy (real build & deploy slice)
+
+First slice of the **Repo + Build/Deploy** capability: replace the Phase 4
+`traefik/whoami` **stub** with a **real build and deploy** of the actual
+`reference-app/empty`. A pluggable `RepoProvider` clones the in-monorepo
+template seed and tags a **vanilla baseline** Revision; a pluggable
+`BuildProvider` builds a Revision into a deployable artifact; the Orchestrator
+performs a **health-gated deploy** that serves the built artifact from the App
+Runtime container and **supersedes** the previous deployment only after the
+health gate passes; **revert** restores a prior Revision by rebuilding and
+redeploying it. This proves the Revision → build → health-gated deploy → revert
+loop end-to-end through the real provider interfaces, while keeping the Phase 4
+Docker-first, in-memory posture.
+
+Decisions for this slice (resolved with the user):
+
+- **Vertical "real build & deploy" slice.** Provider packages + Orchestrator
+  wiring + control-plane wiring + minimal Shell wiring, so the lifecycle is
+  exercised end-to-end. Forgejo, the framework/application partition + the
+  pre-commit hook, template-upgrade/migrations, Postgres persistence, and
+  Kubernetes are explicitly **deferred**.
+- **Local on-disk Git `RepoProvider` (`packages/repo-git`).** The initial
+  provider is a **local filesystem Git** implementation over a configurable
+  workspaces-root directory, using **`simple-git`**. The Forgejo (Gitea-API)
+  provider lands with the Kubernetes slice; the `core` `RepoProvider` interface
+  stays unchanged so it is a drop-in alternative. The **template seed is the
+  in-monorepo `reference-app/empty` directory** (per the Phase 2 decision that
+  this directory is the literal content of the application template repository).
+- **Host build (`packages/build-deploy`).** `BuildProvider` checks out the
+  workspace repo at a ref into a temporary directory and runs the build **on the
+  host** (`pnpm install` + `pnpm build`), capturing structured build
+  diagnostics. Running the build **inside a sandbox/build container** lands with
+  codegen (Phase 6).
+- **Workspace dependency resolution.** `reference-app/empty` depends on
+  `@datonfly-autocode/app-sdk` (transitively `core`) via `workspace:*`, which a
+  standalone clone cannot resolve. `createWorkspaceFromTemplate` **rewrites
+  those `workspace:*` deps to `link:` absolute paths** to the pre-built monorepo
+  packages (the Phase 2 plan already anticipates the Phase 5 seeding step
+  rewriting the `app-sdk` dependency). The Forgejo slice replaces this with a
+  pinned controlled-registry version. **`app-sdk` and `core` must be built
+  before a workspace build runs.**
+- **Static-serve the built artifact.** The App Runtime container serves the Vite
+  **`dist/`** as static files via a web-server image (**`nginx:alpine`**),
+  bind-mounting the built `dist/` read-only. A per-revision Docker image is a
+  later (Kubernetes/prod) concern.
+- **Operations in scope.** `createWorkspaceFromTemplate` (clone + tag baseline),
+  **build a Revision** into an artifact, **health-gated deploy + supersede**,
+  and **revert** to a prior Revision. The framework/application partition + the
+  pre-commit hook and `template-upgrade`/migrations are **deferred**.
+
+### 5.1 `core` contract additions (additive only)
+
+- [x] Add an optional `mounts?: WorkloadMount[]` to `StartWorkloadOptions` in
+      `src/interfaces/sandbox.ts` (`WorkloadMount` =
+      `{ hostPath: string; containerPath: string; readOnly?: boolean }`), so a
+      provider can serve a host-built artifact. Export `WorkloadMount` from
+      `src/interfaces/index.ts` and the barrel. Keep all existing fields.
+- [x] Add a `deployment-state-changed` event to `src/events/events.ts` (and the
+      `controlPlaneEventSchema` union): `workspaceId`, `deploymentId`,
+      `status: DeploymentStatus`, optional `appRuntimeUrl`. Re-export it.
+- [x] Add `revisionWireSchema` / `deploymentWireSchema` (ISO-date transforms
+      mirroring `sessionWireSchema`) + `RevisionWire` / `DeploymentWire` types
+      to `src/endpoints/schemas.ts`; re-export from the barrel. Persisted entity
+      shapes are unchanged.
+- [x] Rebuild `core` (it is a dependency of every other package).
+
+### 5.2 Local-git repo provider (`packages/repo-git`, `@datonfly-autocode/repo-git`)
+
+- [x] Scaffold the package mirroring `core`'s library setup (`package.json`,
+      `tsconfig.json` + `tsconfig.build.json` excluding tests, `tsc` build).
+      Deps: `@datonfly-autocode/core` (`workspace:*`), `simple-git`. Dev:
+      `@types/node` (+ `"types": ["node"]` in tsconfig), `typescript`, `vitest`.
+- [x] `LocalGitRepoProvider` implementing the `core` `RepoProvider` over a
+      configurable workspaces-root directory:
+  - `createWorkspaceFromTemplate` → copy the `reference-app/empty` seed into
+    `<root>/<workspaceId>`, **rewrite the `app-sdk` / `core` `workspace:*` deps
+    to `link:` absolute paths** to the built monorepo packages, `git init` +
+    initial commit, **tag the vanilla baseline**, and return `RepoCoordinates`
+    (the `cloneUrl` is the local path). The framework/application pre-commit
+    hook is **not** installed this slice.
+  - `commit` / `createBranch` / `integrateBranch` / `tag` / `revertToTag` /
+    `history` / `diff` implemented over `simple-git`.
+  - `upgradeTemplate` → throw a not-implemented framework error (deferred).
+- [x] **Unit tests** (Vitest, temp dir): `createWorkspaceFromTemplate` produces
+      a repo with the baseline tag and rewritten deps; `tag` / `revertToTag` /
+      `history` / `diff` round-trip.
+
+### 5.3 Build + deploy (`packages/build-deploy`, `@datonfly-autocode/build-deploy`)
+
+- [x] Scaffold the package mirroring `core`'s library setup. Deps:
+      `@datonfly-autocode/core` (`workspace:*`). Dev: `@types/node` (+
+      `"types": ["node"]`), `typescript`, `vitest`.
+- [x] `HostBuildProvider` implementing the `core` `BuildProvider`: check out the
+      workspace repo at `ref` into a clean temp dir, run `pnpm install` +
+      `pnpm build`, capture stdout/stderr into `BuildDiagnostics`, and on
+      success compute a `digest` (sha256 over the sorted `dist/` files) and
+      return a `BuildArtifact` whose `reference` is the absolute `dist/` path.
+      Use `formatLoggedError()` for logged failures.
+- [x] A `deployArtifact({ sandbox, workspaceId, revisionId, distPath, logger })`
+      helper:
+      `startWorkload("app-runtime", STATIC_SERVER_IMAGE, mounts: [{     hostPath: distPath, containerPath: <nginx html root>, readOnly: true }])`,
+      poll `checkHealth` (the health gate), and return `{ handle, endpoint }`.
+      Keeps the Docker / static-server specifics out of the Orchestrator. Export
+      `STATIC_SERVER_IMAGE` (`nginx:alpine`) and the static root constant.
+- [x] **Unit test** (Vitest): the `dist/` digest helper is stable and
+      order-independent. A full build smoke test runs against a **tiny fixture
+      app** (not the real reference app) and is gated on tool availability.
+
+### 5.4 Docker sandbox — bind mounts (`packages/sandbox-docker`)
+
+- [x] `DockerSandboxProvider.startWorkload` binds `options.mounts` to
+      `HostConfig.Binds` (`${hostPath}:${containerPath}:ro` for read-only). The
+      static server listens on `:80`, so the existing published-port /
+      `endpoint` logic is unchanged.
+- [x] Extend the gated smoke test to start the static-server image with a
+      bind-mounted directory and confirm it serves the file over HTTP.
+
+### 5.5 Orchestrator wiring (`packages/orchestrator`)
+
+- [x] `createOrchestrator` gains injected `repo: RepoProvider` and
+      `build: BuildProvider` (alongside the existing `sandbox` + event sink).
+- [x] `provisionWorkspace` → `repo.createWorkspaceFromTemplate`, record the repo
+      coordinates, create the **baseline `Revision`** (`isBaseline`, `gitTag`,
+      `commitSha`, `buildStatus: "pending"`), and set
+      `workspace.currentRevisionId`.
+- [x] Internal `ensureBuilt(revision)` → if unbuilt, `build.build()`; on success
+      set `artifactDigest` + `buildStatus: "succeeded"` and cache the `dist`
+      path; on failure route into the recovery machine (`build_failed`). Emit
+      the build/deploy step events.
+- [x] `startSession` → `ensureBuilt(currentRevision)` → `deployArtifact` →
+      health gate → create a `healthy` `Deployment` for the current revision and
+      **supersede** the prior one → `active` + `appRuntimeUrl = endpoint`
+      (replaces the Phase 4 stub `startWorkload`). Emit
+      `deployment-state-changed`.
+- [x] `recover(revert, target)` → `repo.revertToTag` → new `Revision` →
+      `ensureBuilt` → `deployArtifact` → health-gated **supersede** (stop the
+      old workload) → emit `deployment-state-changed` with the new
+      `appRuntimeUrl` → `recovered`.
+- [x] `endSession` stops the workload + scales to zero (unchanged) and marks the
+      deployment `stopped`. Add `listRevisions` / `listDeployments` accessors.
+- [x] **Unit tests** update: `FakeRepoProvider` + `FakeBuildProvider` (no
+      Docker) assert provision builds the baseline, `startSession` deploys the
+      current revision, and `revert` rebuilds + supersedes.
+
+### 5.6 Control-plane wiring (`packages/control-plane`)
+
+- [x] `main.ts` instantiates `LocalGitRepoProvider` (workspaces-root + logger)
+      and `HostBuildProvider` (logger), and passes `repo` + `build` to
+      `createOrchestrator`. The seeded demo workspace now provisions a real
+      repo + baseline at boot (slower boot is acceptable).
+- [x] Add the read endpoints `GET workspaceRevisionsPath` → `RevisionWire[]` and
+      `GET workspaceDeploymentsPath` → `DeploymentWire[]` (backed by the new
+      Orchestrator accessors). The gateway already broadcasts the event union,
+      so `deployment-state-changed` flows through unchanged.
+
+### 5.7 Shell wiring (`packages/shell-ui`)
+
+- [x] `useControlPlaneSession`: on `deployment-state-changed` carrying a new
+      `appRuntimeUrl`, update `state.appRuntimeUrl` so the `<iframe>` repoints
+      after a supersede / revert. `SessionPanel` optionally shows the current
+      revision id + build status. (Recovery buttons already POST recovery;
+      revert now triggers a real rebuild + redeploy.)
+
+### 5.8 Dev wiring & verification
+
+- [x] Update `INSTALL.md`: the control plane now performs **real build +
+      deploy** — Docker daemon + `pnpm` on the host are required, `app-sdk` and
+      `core` must be built first, the workspaces-root directory and the
+      `nginx:alpine` static-server image are used, and the build runs on
+      provision (slower seed).
+- [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+      `pnpm format:check`, the `repo-git` / `build-deploy` / orchestrator unit
+      tests, and the `sandbox-docker` smoke test (with Docker) pass.
+- [x] Manual smoke check: provisioning builds the baseline; `startSession`
+      deploys an `nginx` container serving the **real** empty app (`docker ps`
+      shows the bind mount); the Shell `<iframe>` loads the empty MUI app;
+      `revert` rebuilds + supersedes (old container stopped, the `<iframe>`
+      repoints); ending the session stops the container.
+- [x] Commit: "Add real build and deploy with a local-git repo provider and
+      health-gated deployment."
+
+### Deferred to a later slice
+
+- [ ] Forgejo (Gitea-API) `RepoProvider` running in-cluster, replacing the
+      local-git provider.
+- [ ] Framework-owned vs. application-owned partition + the pre-commit hook
+      rejecting commits to the framework-owned area.
+- [ ] `template-upgrade`: pull/merge framework-owned files + versioned migration
+      scripts from the recorded template version (with recovery-loop fallback).
+- [ ] In-sandbox (container) builds via the `SandboxProvider`, replacing the
+      host build (lands with codegen, Phase 6).
+- [ ] Per-revision Docker image artifacts and Postgres-backed control-plane
+      persistence of revisions/deployments (data-preserving migrations).
+
+---
+
 ## Later phases (coarse — expand when reached)
 
-- [ ] **Phase 5 — Repo + build/deploy** (`packages/repo-git`,
-      `packages/build-deploy`): deployment routing, health-gated deploys,
-      revert. `RepoProvider` is pluggable; the initial implementation targets a
-      **self-hosted Forgejo** instance running in-cluster (Gitea-API compatible,
-      so a Gitea backend remains a drop-in alternative). `RepoProvider` gains a
-      **create-workspace-from-template** operation (clone the application
-      template repo, set it as `upstream`, tag the vanilla baseline, install the
-      framework-area pre-commit hook) and a **template-upgrade** operation
-      (pull/merge framework-owned files + run versioned migration scripts from
-      the recorded template version).
 - [ ] **Phase 6 — Codegen** (`packages/codegen`): codegen sandbox, agent
       integration, Generate flow producing commits → build → deploy. Reuse the
       **`datonfly-assistant` agent runtime**, extended with **tool support** and

@@ -13,8 +13,10 @@
         "lint:fix": "eslint src/ --fix"
     },
     "dependencies": {
+        "@datonfly-autocode/build-deploy": "workspace:*",
         "@datonfly-autocode/core": "workspace:*",
         "@datonfly-autocode/orchestrator": "workspace:*",
+        "@datonfly-autocode/repo-git": "workspace:*",
         "@datonfly-autocode/sandbox-docker": "workspace:*",
         "@nestjs/common": "^11.1.0",
         "@nestjs/config": "^4.0.0",

@@ -60,12 +60,25 @@ search configuration is needed).
 
 3. **Start the control-plane backend** (`packages/control-plane`). It drives the
    Docker-backed orchestrator and the session lifecycle, so a running **Docker
-   daemon is required**. On boot it seeds a demo workspace and, when a session
-   starts, launches the stub App Runtime container and reports its
-   `appRuntimeUrl` to the Shell.
+   daemon is required**. Unlike earlier slices it now performs a **real build +
+   deploy**: on boot it provisions a demo workspace as a local Git repository
+   cloned from `reference-app/empty`, builds it with host `pnpm`, and (when a
+   session starts) serves the built `dist` from an `nginx:alpine` container over
+   a read-only bind mount, reporting its `appRuntimeUrl` to the Shell. This
+   means:
+   - **`pnpm` on the host** is used to install + build each workspace (not just
+     this repo's packages).
+   - **`app-sdk` and `core` must be built first** — the standalone workspace
+     links against their compiled output. A full `pnpm build` (above) covers
+     this.
+   - The **`nginx:alpine`** image is pulled on first deploy.
+   - Workspaces are created under a workspaces-root directory (default
+     `.workspaces/` in the repo root; override with `DF_WORKSPACES_ROOT`).
+   - The build runs on provision, so **the first boot is slower** than the
+     previous stub.
 
    ```bash
-   # in datonfly-autocode (Docker daemon must be running)
+   # in datonfly-autocode (Docker daemon must be running; run `pnpm build` first)
    pnpm --filter @datonfly-autocode/control-plane dev
    ```
 
@@ -83,5 +96,6 @@ search configuration is needed).
    control-plane API (`/datonfly-autocode`, with `ws: true` for socket.io) to
    the backend on port 3100. On load it starts a session for the seeded demo
    workspace; the sandboxed sub-frame is pointed at the control plane's
-   `appRuntimeUrl` (the running stub container), so the standalone
-   `reference-empty-app` is not needed for the sub-frame in this slice.
+   `appRuntimeUrl` — the `nginx` container serving the freshly built
+   `reference-empty-app`. The iframe automatically repoints when a new
+   deployment becomes healthy (for example after a `revert`).

@@ -20,6 +20,8 @@ export {
 export type {
     WorkspaceWire,
     SessionWire,
+    RevisionWire,
+    DeploymentWire,
     StartSessionResponse,
     ProvisionWorkspaceRequest,
     StartSessionRequest,
@@ -30,6 +32,8 @@ export type {
 export {
     workspaceWireSchema,
     sessionWireSchema,
+    revisionWireSchema,
+    deploymentWireSchema,
     startSessionResponseSchema,
     provisionWorkspaceRequestSchema,
     startSessionRequestSchema,

@@ -41,6 +41,45 @@ export const sessionWireSchema = z.object({
 /** A session parsed from its JSON wire representation. */
 export type SessionWire = z.infer<typeof sessionWireSchema>;
 
+// ─── Revision wire format ───
+
+/** Wire schema for a revision as serialized over JSON. */
+export const revisionWireSchema = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    gitTag: z.string(),
+    commitSha: z.string(),
+    artifactDigest: z.string().nullable().optional(),
+    buildStatus: z.enum(["pending", "building", "succeeded", "failed"]),
+    originCodegenJobId: z.string().nullable().optional(),
+    parentRevisionId: z.string().nullable().optional(),
+    isBaseline: z.boolean(),
+    createdAt: z.string().transform((s) => new Date(s)),
+});
+
+/** A revision parsed from its JSON wire representation. */
+export type RevisionWire = z.infer<typeof revisionWireSchema>;
+
+// ─── Deployment wire format ───
+
+/** Wire schema for a deployment as serialized over JSON. */
+export const deploymentWireSchema = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    revisionId: z.string(),
+    status: z.enum(["pending", "deploying", "healthy", "unhealthy", "superseded", "stopped"]),
+    supersededDeploymentId: z.string().nullable().optional(),
+    createdAt: z.string().transform((s) => new Date(s)),
+    healthyAt: z
+        .string()
+        .transform((s) => new Date(s))
+        .nullable()
+        .optional(),
+});
+
+/** A deployment parsed from its JSON wire representation. */
+export type DeploymentWire = z.infer<typeof deploymentWireSchema>;
+
 // ─── Responses ───
 
 /**

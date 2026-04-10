@@ -1,5 +1,5 @@
 {
-    "name": "@datonfly-autocode/orchestrator",
+    "name": "@datonfly-autocode/build-deploy",
     "version": "0.0.1",
     "private": true,
     "type": "module",
@@ -20,7 +20,6 @@
         "lint:fix": "eslint src/ --fix"
     },
     "dependencies": {
-        "@datonfly-autocode/build-deploy": "workspace:*",
         "@datonfly-autocode/core": "workspace:*"
     },
     "devDependencies": {

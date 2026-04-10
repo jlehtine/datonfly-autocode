@@ -4,5 +4,6 @@ export {
     sandboxStateChangedSchema,
     codegenJobProgressSchema,
     recoveryStateChangedSchema,
+    deploymentStateChangedSchema,
     controlPlaneEventSchema,
 } from "./events.js";

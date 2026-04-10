@@ -21,6 +21,8 @@ const LABEL_MANAGED = "com.datonfly.autocode.managed";
 const LABEL_WORKSPACE = "com.datonfly.autocode.workspace";
 /** Docker label recording the workload kind of a managed container. */
 const LABEL_KIND = "com.datonfly.autocode.kind";
+/** Docker label recording the instance discriminator of a managed container. */
+const LABEL_INSTANCE = "com.datonfly.autocode.instance";
 
 /** Container port the stub App Runtime image listens on by default (`traefik/whoami`). */
 const DEFAULT_APP_RUNTIME_PORT = 80;
@@ -99,8 +101,8 @@ export class DockerSandboxProvider implements SandboxProvider {
 
     /** Remove the workspace's managed containers and its network. */
     async destroyNamespace(workspaceId: WorkspaceId): Promise<void> {
-        await this.removeContainerByName(this.containerName(workspaceId, "app-runtime"));
-        await this.removeContainerByName(this.containerName(workspaceId, "codegen"));
+        await this.removeContainersByLabel(workspaceId, "app-runtime");
+        await this.removeContainersByLabel(workspaceId, "codegen");
 
         const network = this.docker.getNetwork(this.networkName(workspaceId));
         try {
@@ -120,20 +122,34 @@ export class DockerSandboxProvider implements SandboxProvider {
      * handle whose `endpoint` is the reachable base URL.
      */
     async startWorkload(options: StartWorkloadOptions): Promise<WorkloadHandle> {
-        const { workspaceId, kind, image } = options;
+        const { workspaceId, kind, image, instanceId } = options;
         await this.ensureImage(image);
 
-        const name = this.containerName(workspaceId, kind);
-        // Replace any stale container left from a previous run.
+        const name = this.containerName(workspaceId, kind, instanceId);
+        // Replace any container with this exact name left from a previous run.
+        // When an `instanceId` is given the name is instance-specific, so sibling
+        // instances of the same kind keep running — letting a new deployment pass
+        // its health gate before the superseded one is stopped.
         await this.removeContainerByName(name);
 
         const portKey = `${String(this.appRuntimePort)}/tcp`;
+        const binds = (options.mounts ?? []).map(
+            (mount) => `${mount.hostPath}:${mount.containerPath}${mount.readOnly === true ? ":ro" : ""}`,
+        );
         const createOptions: Docker.ContainerCreateOptions = {
             name,
             Image: image,
-            Labels: { [LABEL_MANAGED]: "true", [LABEL_WORKSPACE]: workspaceId, [LABEL_KIND]: kind },
+            Labels: {
+                [LABEL_MANAGED]: "true",
+                [LABEL_WORKSPACE]: workspaceId,
+                [LABEL_KIND]: kind,
+                ...(instanceId !== undefined ? { [LABEL_INSTANCE]: instanceId } : {}),
+            },
             ExposedPorts: { [portKey]: {} },
-            HostConfig: { PortBindings: { [portKey]: [{ HostPort: "" }] } },
+            HostConfig: {
+                PortBindings: { [portKey]: [{ HostPort: "" }] },
+                ...(binds.length > 0 ? { Binds: binds } : {}),
+            },
         };
         if (options.env) {
             createOptions.Env = Object.entries(options.env).map(([key, value]) => `${key}=${value}`);
@@ -162,7 +178,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 
         const endpoint = `http://${this.publishHost}:${hostPort}`;
         this.logger.info({ workspaceId, kind, name, endpoint }, "Started workload container");
-        return { workspaceId, kind, name, endpoint };
+        return { workspaceId, kind, ...(instanceId !== undefined ? { instanceId } : {}), name, endpoint };
     }
 
     /** Stop and remove a workload container. */
@@ -170,9 +186,9 @@ export class DockerSandboxProvider implements SandboxProvider {
         await this.removeContainerByName(handle.name);
     }
 
-    /** Stop and remove the workspace's App Runtime container. */
+    /** Stop and remove all of the workspace's App Runtime containers. */
     async scaleToZero(workspaceId: WorkspaceId): Promise<void> {
-        await this.removeContainerByName(this.containerName(workspaceId, "app-runtime"));
+        await this.removeContainersByLabel(workspaceId, "app-runtime");
     }
 
     /** Probe the workload's HTTP endpoint and report whether it is serving. */
@@ -255,9 +271,20 @@ export class DockerSandboxProvider implements SandboxProvider {
         }
     }
 
+    /** Stop and remove every managed container of a kind for a workspace (all instances). */
+    private async removeContainersByLabel(workspaceId: WorkspaceId, kind: SandboxWorkloadKind): Promise<void> {
+        const containers = await this.docker.listContainers({
+            all: true,
+            filters: { label: [`${LABEL_WORKSPACE}=${workspaceId}`, `${LABEL_KIND}=${kind}`] },
+        });
+        await Promise.all(containers.map((container) => this.removeContainerByName(container.Id)));
+    }
+
     /** Deterministic container name for a workspace's workload of a given kind. */
-    private containerName(workspaceId: WorkspaceId, kind: SandboxWorkloadKind): string {
-        return `df-autocode-${kind}-${workspaceId}`;
+    private containerName(workspaceId: WorkspaceId, kind: SandboxWorkloadKind, instanceId?: string): string {
+        return instanceId === undefined
+            ? `df-autocode-${kind}-${workspaceId}`
+            : `df-autocode-${kind}-${workspaceId}-${instanceId}`;
     }
 
     /** Deterministic network name for a workspace. */

@@ -1,6 +1,13 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post } from "@nestjs/common";
 
-import type { Session, StartSessionResponse, UserId, UserWorkspace } from "@datonfly-autocode/core";
+import type {
+    Deployment,
+    Revision,
+    Session,
+    StartSessionResponse,
+    UserId,
+    UserWorkspace,
+} from "@datonfly-autocode/core";
 import {
     applicationIdSchema,
     recoveryRequestSchema,
@@ -40,6 +47,18 @@ export class WorkspacesController {
     @Get()
     list(): UserWorkspace[] {
         return this.orchestrator.listWorkspaces();
+    }
+
+    /** List a workspace's revisions, newest first. */
+    @Get(":id/revisions")
+    listRevisions(@Param("id") id: string): Revision[] {
+        return this.orchestrator.listRevisions(workspaceIdSchema.parse(id));
+    }
+
+    /** List a workspace's deployments, newest first. */
+    @Get(":id/deployments")
+    listDeployments(@Param("id") id: string): Deployment[] {
+        return this.orchestrator.listDeployments(workspaceIdSchema.parse(id));
     }
 }
 

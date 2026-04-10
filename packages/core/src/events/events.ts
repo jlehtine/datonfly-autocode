@@ -37,12 +37,23 @@ export const recoveryStateChangedSchema = z.object({
     state: z.enum(["vanilla", "building", "deployed", "build_failed", "runtime_failed", "recovered"]),
 });
 
+/** A deployment changed lifecycle state (including the health-gate outcome). */
+export const deploymentStateChangedSchema = z.object({
+    event: z.literal("deployment-state-changed"),
+    workspaceId: z.string(),
+    deploymentId: z.string(),
+    status: z.enum(["pending", "deploying", "healthy", "unhealthy", "superseded", "stopped"]),
+    /** Reachable base URL of the deployed App Runtime, when it has one. */
+    appRuntimeUrl: z.string().optional(),
+});
+
 /** Discriminated union of all control-plane → Shell events. */
 export const controlPlaneEventSchema = z.discriminatedUnion("event", [
     sessionStateChangedSchema,
     sandboxStateChangedSchema,
     codegenJobProgressSchema,
     recoveryStateChangedSchema,
+    deploymentStateChangedSchema,
 ]);
 
 /** Any event broadcast by the control plane to the Shell. */

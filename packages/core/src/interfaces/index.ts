@@ -7,6 +7,7 @@ export type {
     EgressRule,
     CreateNamespaceOptions,
     StartWorkloadOptions,
+    WorkloadMount,
     WorkloadHandle,
     WorkloadHealth,
 } from "./sandbox.js";

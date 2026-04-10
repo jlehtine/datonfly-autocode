@@ -80,6 +80,7 @@ export function useControlPlaneSession(): {
     useEffect(() => {
         let active = true;
         let currentSessionId: string | undefined;
+        let currentWorkspaceId: string | undefined;
 
         const socket = io({ path: WS_PATH, transports: ["websocket", "polling"] });
         socket.on(CONTROL_PLANE_EVENT_CHANNEL, (raw: unknown) => {
@@ -92,6 +93,15 @@ export function useControlPlaneSession(): {
                 setState((prev) => ({ ...prev, status: event.status }));
             } else if (event.event === "recovery-state-changed" && event.sessionId === currentSessionId) {
                 setState((prev) => ({ ...prev, recoveryState: event.state }));
+            } else if (
+                event.event === "deployment-state-changed" &&
+                event.workspaceId === currentWorkspaceId &&
+                event.appRuntimeUrl !== undefined
+            ) {
+                // A new deployment became healthy (initial deploy, supersede, or
+                // revert): repoint the iframe at the freshly served revision.
+                const { appRuntimeUrl } = event;
+                setState((prev) => ({ ...prev, appRuntimeUrl }));
             }
         });
 
@@ -101,6 +111,7 @@ export function useControlPlaneSession(): {
                     return;
                 }
                 currentSessionId = session.id;
+                currentWorkspaceId = session.workspaceId;
                 setState({
                     status: session.status,
                     recoveryState: session.recoveryState,

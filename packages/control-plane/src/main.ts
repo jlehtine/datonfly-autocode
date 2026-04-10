@@ -1,11 +1,16 @@
 import "reflect-metadata";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { NestFactory } from "@nestjs/core";
 import { Logger, LoggerErrorInterceptor } from "nestjs-pino";
 import pino from "pino";
 
+import { HostBuildProvider } from "@datonfly-autocode/build-deploy";
 import { applicationIdSchema, type ProviderLogger } from "@datonfly-autocode/core";
 import { createOrchestrator } from "@datonfly-autocode/orchestrator";
+import { LocalGitRepoProvider } from "@datonfly-autocode/repo-git";
 import { DockerSandboxProvider } from "@datonfly-autocode/sandbox-docker";
 
 import { ControlPlaneModule } from "./app.module.js";
@@ -17,6 +22,9 @@ const DEMO_APPLICATION_ID = applicationIdSchema.parse("a0000000-0000-4000-8000-0
 /** Fixed demo user that owns the seeded workspace and drives sessions. */
 const DEMO_USER_ID = "demo-user";
 
+/** Monorepo root, resolved from this module's compiled location (`packages/control-plane/dist/main.js`). */
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
 async function bootstrap(): Promise<void> {
     const providerLogger: ProviderLogger = pino({
         level: process.env.LOG_LEVEL ?? "info",
@@ -25,9 +33,32 @@ async function bootstrap(): Promise<void> {
             : { transport: { target: "pino-pretty", options: { singleLine: true } } }),
     }).child({ component: "control-plane" });
 
+    // Real build + deploy: each workspace is a local Git repo cloned from the
+    // reference template, built with host pnpm, and served via nginx over a
+    // read-only bind mount. The workspaces root must be shared between the repo
+    // provider (where it creates repos) and the build provider (where it clones
+    // from). Linked dependencies point the standalone workspace at the
+    // monorepo's built packages.
+    const workspacesRoot = process.env.DF_WORKSPACES_ROOT ?? path.join(REPO_ROOT, ".workspaces");
+    const repo = new LocalGitRepoProvider({
+        workspacesRoot,
+        templateSeedPath: path.join(REPO_ROOT, "reference-app", "empty"),
+        linkDependencies: {
+            "@datonfly-autocode/app-sdk": path.join(REPO_ROOT, "packages", "app-sdk"),
+            "@datonfly-autocode/core": path.join(REPO_ROOT, "packages", "core"),
+        },
+        logger: providerLogger.child({ component: "repo-git" }),
+    });
+    const build = new HostBuildProvider({
+        workspacesRoot,
+        logger: providerLogger.child({ component: "build-deploy" }),
+    });
+
     const sandbox = new DockerSandboxProvider({ logger: providerLogger.child({ component: "sandbox-docker" }) });
     const eventBus = new ControlPlaneEventBus();
     const orchestrator = createOrchestrator({
+        repo,
+        build,
         sandbox,
         emit: (event) => {
             eventBus.emit(event);

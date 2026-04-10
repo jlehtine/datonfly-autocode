@@ -1,6 +1,6 @@
 {
-    "extends": "../../tsconfig.base.json",
     "compilerOptions": {
+        "target": "ES2022",
         "outDir": "dist",
         "rootDir": "src",
         "jsx": "react-jsx",
@@ -10,8 +10,20 @@
         "declaration": false,
         "declarationMap": false,
         "sourceMap": false,
-        "verbatimModuleSyntax": false,
-        "noEmit": true
+        "noEmit": true,
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "exactOptionalPropertyTypes": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "forceConsistentCasingInFileNames": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": false
     },
     "include": ["src", "vite-env.d.ts", "vite.config.ts"]
 }
