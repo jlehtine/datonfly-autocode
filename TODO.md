@@ -559,7 +559,7 @@ Decisions for this slice (resolved with the user):
 - [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
       `pnpm format:check`, the orchestrator unit tests, and the `sandbox-docker`
       smoke test (with Docker) pass.
-- [ ] Manual smoke check: with Docker + the backend up, `POST` a session →
+- [x] Manual smoke check: with Docker + the backend up, `POST` a session →
       response carries the session + `appRuntimeUrl`; `docker ps` shows the
       container; WS emits session/sandbox events; the Shell moves `starting` →
       `active` and the `<iframe>` loads the stub; ending the session stops the
