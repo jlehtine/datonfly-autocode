@@ -949,20 +949,20 @@ Decisions for this slice (resolved with the user):
 
 ### 6.5 Use-case documentation
 
-- [ ] Create `USE-CASES.md` (top-level, numbered-section style matching
+- [x] Create `USE-CASES.md` (top-level, numbered-section style matching
       `ARCHITECTURE.md`) as the durable record of how the system behaves per
       user goal. Each use case co-locates both lenses: **Actors & trigger**,
       **User experience**, **Flow (implementation)** (components, ordered
       interactions, events, linking to `ARCHITECTURE.md` sections and the
       JSDoc'd interfaces), **Failure & recovery**, and **Status** (implemented /
       partial / planned).
-- [ ] Write the first entry, **Generate**, capturing this slice's behavior and
+- [x] Write the first entry, **Generate**, capturing this slice's behavior and
       the resolved decisions (deployment build vs. inner-loop build/test, one
       job = one generation cycle, the ownership split), marking the in-sandbox
       inner loop and interactive clarification as planned.
-- [ ] Cross-link: add `USE-CASES.md` to the Documentation section of
+- [x] Cross-link: add `USE-CASES.md` to the Documentation section of
       `CONVENTIONS.md`, and add a pointer from `ARCHITECTURE.md`.
-- [ ] Update `.github/copilot-instructions.md`: note that `USE-CASES.md` is the
+- [x] Update `.github/copilot-instructions.md`: note that `USE-CASES.md` is the
       durable record of system behavior and must be kept up to date as
       implementation proceeds — including the convention that when a TODO slice
       completes, its durable behavior is distilled into the relevant

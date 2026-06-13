@@ -48,7 +48,14 @@ steps. Before starting non-trivial work, record the plan there; as steps land,
 mark them done so the file reflects current progress. Follow the structure and
 progress-tracking rules documented at the top of that file. `TODO.md` is working
 state, not permanent documentation — durable facts belong in the long-lived docs
-(README, ARCHITECTURE, CONVENTIONS).
+(README, ARCHITECTURE, CONVENTIONS, USE-CASES).
+
+[USE-CASES.md](../USE-CASES.md) is the durable record of how the system behaves
+per user goal, co-locating the user experience and the implementation flow for
+each use case. Keep it current as implementation proceeds: when a `TODO.md`
+slice completes, distill its durable behavior into the relevant `USE-CASES.md`
+entry before pruning the slice from `TODO.md`. (You need not read it for every
+task — consult it when behavior across a use case is relevant.)
 
 ## Dependency Licensing
 

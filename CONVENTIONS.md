@@ -107,10 +107,16 @@ changes.
 All public API interfaces are documented with **JSDoc**.
 
 Project-wide conventions belong in this file (`CONVENTIONS.md`), with the
-architecture in [ARCHITECTURE.md](ARCHITECTURE.md) and the general description
-in [README.md](README.md). Agent-specific instructions (e.g.
+architecture in [ARCHITECTURE.md](ARCHITECTURE.md), the per-user-goal behavior
+in [USE-CASES.md](USE-CASES.md), and the general description in
+[README.md](README.md). Agent-specific instructions (e.g.
 `.github/copilot-instructions.md`) should only contain agent workflow rules and
 reference these documents for general conventions — never duplicate them.
+
+[USE-CASES.md](USE-CASES.md) is the durable record of how the system behaves per
+user goal, co-locating the user experience and the implementation flow for each
+use case. When a `TODO.md` slice lands, distill its durable behavior into the
+relevant `USE-CASES.md` entry before pruning the slice from `TODO.md`.
 
 ## User interface
 

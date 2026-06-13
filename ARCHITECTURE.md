@@ -6,6 +6,9 @@ model, and the contracts between them. It does not prescribe the architecture of
 applications running inside the framework; those are defined by each vendor
 application and its stack template.
 
+For how these structures behave over time per user goal (e.g. Generate), see
+[USE-CASES.md](USE-CASES.md).
+
 ## 1. Overview
 
 Autocode is organized into three planes:
