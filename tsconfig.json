@@ -5,6 +5,7 @@
         { "path": "./packages/app-sdk" },
         { "path": "./packages/repo-git" },
         { "path": "./packages/build-deploy" },
+        { "path": "./packages/codegen" },
         { "path": "./packages/shell-ui" },
         { "path": "./reference-app/empty" }
     ]

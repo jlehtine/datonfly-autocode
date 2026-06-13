@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { deployArtifact } from "@datonfly-autocode/build-deploy";
 import {
+    codegenJobIdSchema,
     deploymentIdSchema,
     formatLoggedError,
     NOOP_PROVIDER_LOGGER,
@@ -9,6 +10,12 @@ import {
     sessionIdSchema,
     workspaceIdSchema,
     type BuildProvider,
+    type CodegenJob,
+    type CodegenJobId,
+    type CodegenJobRequest,
+    type CodegenJobResult,
+    type CodegenProvider,
+    type CodegenStepEvent,
     type ControlPlaneEvent,
     type Deployment,
     type DeploymentId,
@@ -57,6 +64,14 @@ export interface OrchestratorOptions {
     repo: RepoProvider;
     /** Build provider that turns a revision into a deployable `dist/` artifact. */
     build: BuildProvider;
+    /**
+     * Codegen provider that drives the agent to produce a committed revision.
+     *
+     * Optional: a deployment can run the on-demand session lifecycle without
+     * codegen configured. {@link Orchestrator.runCodegenJob} rejects when it is
+     * absent. The concrete provider (and its agent) is wired in a later slice.
+     */
+    codegen?: CodegenProvider;
     /** Sink for control-plane events emitted during lifecycle transitions. */
     emit: ControlPlaneEventSink;
     /** Application template new workspaces are provisioned from. */
@@ -88,6 +103,10 @@ export interface InMemoryOrchestrator extends Orchestrator {
     listRevisions(workspaceId: WorkspaceId): Revision[];
     /** All deployments of a workspace, newest first. */
     listDeployments(workspaceId: WorkspaceId): Deployment[];
+    /** All codegen jobs of a workspace, newest first. */
+    listCodegenJobs(workspaceId: WorkspaceId): CodegenJob[];
+    /** A codegen job by id, if it exists. */
+    getCodegenJob(jobId: CodegenJobId): CodegenJob | undefined;
 }
 
 /** In-memory control-plane state for a single orchestrator instance. */
@@ -96,6 +115,8 @@ interface Store {
     sessions: Map<SessionId, Session>;
     revisions: Map<RevisionId, Revision>;
     deployments: Map<DeploymentId, Deployment>;
+    /** Codegen jobs recorded against workspaces. */
+    codegenJobs: Map<CodegenJobId, CodegenJob>;
     /** Live sandbox handle per deployment, used to stop the workload on supersede/end. */
     deploymentHandles: Map<DeploymentId, WorkloadHandle>;
     /** Built `dist/` directory path per successfully built revision. */
@@ -125,6 +146,7 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
     const sandbox = options.sandbox;
     const repo = options.repo;
     const build = options.build;
+    const codegen = options.codegen;
     const emit = options.emit;
     const template = options.template ?? DEFAULT_TEMPLATE;
     const resourceLimits = options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS;
@@ -137,6 +159,7 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
         sessions: new Map(),
         revisions: new Map(),
         deployments: new Map(),
+        codegenJobs: new Map(),
         deploymentHandles: new Map(),
         distPaths: new Map(),
         appRuntimeUrls: new Map(),
@@ -156,6 +179,10 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
 
     function newDeploymentId(): DeploymentId {
         return deploymentIdSchema.parse(randomUUID());
+    }
+
+    function newCodegenJobId(): CodegenJobId {
+        return codegenJobIdSchema.parse(randomUUID());
     }
 
     function requireSession(sessionId: SessionId): Session {
@@ -422,6 +449,109 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
             return activeSession;
         },
 
+        async runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult> {
+            if (!codegen) {
+                throw new Error("No codegen provider is configured for this orchestrator");
+            }
+            const workspaceId = workspaceIdSchema.parse(request.workspaceId);
+            const workspace = requireWorkspace(workspaceId);
+
+            const jobId = newCodegenJobId();
+            const createdAt = new Date();
+            const queued: CodegenJob = {
+                id: jobId,
+                workspaceId,
+                ...(request.sessionId !== undefined ? { sessionId: sessionIdSchema.parse(request.sessionId) } : {}),
+                kind: request.kind,
+                prompt: request.prompt,
+                branch: "",
+                status: "queued",
+                createdAt,
+            };
+            store.codegenJobs.set(jobId, queued);
+            store.codegenJobs.set(jobId, { ...queued, status: "planning" });
+
+            // Drive the provider (planned-diff -> commit), forwarding its step
+            // events as codegen-job-progress.
+            const result = await codegen.runJob(request, (event) => {
+                emit({
+                    event: "codegen-job-progress",
+                    jobId,
+                    step: event.step,
+                    phase: event.phase,
+                    ...(event.ok !== undefined ? { ok: event.ok } : {}),
+                });
+            });
+
+            const steps: CodegenStepEvent[] = [...result.steps];
+            const finishJob = (status: "succeeded" | "failed", patch?: Partial<CodegenJob>): void => {
+                const current = store.codegenJobs.get(jobId);
+                if (current) {
+                    store.codegenJobs.set(jobId, { ...current, ...patch, status, completedAt: new Date() });
+                }
+            };
+
+            if (!result.succeeded || result.producedRevisionId === undefined) {
+                finishJob("failed");
+                return { ...result, steps };
+            }
+
+            // The provider committed and tagged a revision; the orchestrator owns
+            // the authoritative deployment build of it.
+            const revisionId = revisionIdSchema.parse(result.producedRevisionId);
+            const branch = `codegen/${revisionId}`;
+            const [head] = await repo.history(workspaceId, 1);
+            const adopted: Revision = {
+                id: revisionId,
+                workspaceId,
+                gitTag: `rev-${revisionId}`,
+                commitSha: head?.sha ?? "",
+                buildStatus: "pending",
+                isBaseline: false,
+                originCodegenJobId: jobId,
+                ...(workspace.currentRevisionId !== undefined ? { parentRevisionId: workspace.currentRevisionId } : {}),
+                createdAt: new Date(),
+            };
+            store.revisions.set(revisionId, adopted);
+            const planningJob = store.codegenJobs.get(jobId);
+            if (planningJob) {
+                store.codegenJobs.set(jobId, {
+                    ...planningJob,
+                    status: "building",
+                    branch,
+                    producedRevisionId: revisionId,
+                });
+            }
+
+            emit({ event: "codegen-job-progress", jobId, step: "build", phase: "started" });
+            let built: { revision: Revision; distPath: string };
+            try {
+                built = await ensureBuilt(adopted);
+            } catch (error) {
+                emit({ event: "codegen-job-progress", jobId, step: "build", phase: "completed", ok: false });
+                steps.push({ step: "build", phase: "completed", ok: false, at: Date.now() });
+                finishJob("failed", { branch, producedRevisionId: revisionId });
+                logger.warn(
+                    { workspaceId, jobId, revisionId, error: formatLoggedError(error) },
+                    "Codegen revision build failed",
+                );
+                return { succeeded: false, summary: result.summary, steps };
+            }
+            emit({ event: "codegen-job-progress", jobId, step: "build", phase: "completed", ok: true });
+            steps.push({ step: "build", phase: "completed", ok: true, at: Date.now() });
+
+            const workspaceNow = requireWorkspace(workspaceId);
+            store.workspaces.set(workspaceId, {
+                ...workspaceNow,
+                currentRevisionId: built.revision.id,
+                updatedAt: new Date(),
+            });
+            finishJob("succeeded", { branch, producedRevisionId: revisionId });
+            logger.info({ workspaceId, jobId, revisionId }, "Codegen job produced and built a revision");
+
+            return { succeeded: true, producedRevisionId: revisionId, summary: result.summary, steps };
+        },
+
         async endSession(sessionId: SessionId): Promise<void> {
             const session = store.sessions.get(sessionId);
             if (!session) {
@@ -567,6 +697,14 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
             return [...store.deployments.values()]
                 .filter((deployment) => deployment.workspaceId === workspaceId)
                 .reverse();
+        },
+
+        listCodegenJobs(workspaceId: WorkspaceId): CodegenJob[] {
+            return [...store.codegenJobs.values()].filter((job) => job.workspaceId === workspaceId).reverse();
+        },
+
+        getCodegenJob(jobId: CodegenJobId): CodegenJob | undefined {
+            return store.codegenJobs.get(jobId);
         },
     };
 }

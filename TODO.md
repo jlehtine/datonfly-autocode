@@ -873,27 +873,27 @@ Decisions for this slice (resolved with the user):
 
 ### 6.1 `core` — orchestrator codegen entry (additive)
 
-- [ ] Add `runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult>`
+- [x] Add `runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult>`
       to the `Orchestrator` interface in `src/interfaces/orchestrator.ts`. No
       other contract changes — the codegen DTOs, step events, and the
       `codegen-job-progress` event already exist. Rebuild `core`.
 
 ### 6.2 `codegen` package (`packages/codegen`, `@datonfly-autocode/codegen`)
 
-- [ ] Scaffold mirroring `core`'s library setup (`package.json`,
+- [x] Scaffold mirroring `core`'s library setup (`package.json`,
       `tsconfig.json` + `tsconfig.build.json` excluding tests, `tsc` build).
       Deps: `@datonfly-autocode/core` (`workspace:*`),
       `@datonfly-assistant/core` (`link:` to the sibling, type-only —
       `IAgentProvider` / `ITool` / `AgentMessage`; the §3.7 registry migration
       will later cover this too). Dev: `@types/node` (+ `"types": ["node"]`),
       `typescript`, `vitest`.
-- [ ] **Application-scoped file tools** (`src/tools/fs-tools.ts`):
+- [x] **Application-scoped file tools** (`src/tools/fs-tools.ts`):
       `createFileTools({ workdir, allowedGlobs })` returning `ITool[]`
       (`list_files`, `read_file`, `write_file`, `search_files`), each resolving
       paths against `workdir` and **rejecting** paths that escape the repo or
       fall outside `allowedGlobs`; track the set of written files. Export
       `DEFAULT_APPLICATION_OWNED_GLOBS = ["src/**"]`.
-- [ ] **`HostCodegenProvider`** (`src/host-codegen-provider.ts`) implementing
+- [x] **`HostCodegenProvider`** (`src/host-codegen-provider.ts`) implementing
       `core.CodegenProvider`, constructed with
       `{ agent, repo, resolveWorkdir, applicationOwnedGlobs?, systemPrompt?, logger? }`.
       `runJob(request, onStep)`:
@@ -910,9 +910,9 @@ Decisions for this slice (resolved with the user):
     `{ succeeded, producedRevisionId, summary, steps: [planned-diff, commit] }`.
     On agent/commit failure → `{ succeeded: false, summary, steps }` with no
     revision (repair is Phase 7).
-- [ ] **Barrel** (`src/index.ts`): export `HostCodegenProvider`,
+- [x] **Barrel** (`src/index.ts`): export `HostCodegenProvider`,
       `createFileTools`, `DEFAULT_APPLICATION_OWNED_GLOBS`, with JSDoc.
-- [ ] **Unit tests** (Vitest): file-tool traversal + out-of-glob write
+- [x] **Unit tests** (Vitest): file-tool traversal + out-of-glob write
       rejection; a fake `IAgentProvider` that invokes `write_file` then returns
       a summary, run over a real temp git repo (seeded `src/`), asserting the
       branch / commit / integrate / tag round-trip, `producedRevisionId`, and
@@ -920,9 +920,11 @@ Decisions for this slice (resolved with the user):
 
 ### 6.3 Orchestrator wiring (`packages/orchestrator`)
 
-- [ ] Add `codegen: CodegenProvider` to `OrchestratorOptions`; add
+- [x] Add `codegen?: CodegenProvider` to `OrchestratorOptions` (optional so the
+      control-plane composition root compiles before the concrete agent is wired
+      — `runCodegenJob` rejects when it is absent); add
       `codegenJobs: Map<CodegenJobId, CodegenJob>` to the store.
-- [ ] Implement `runCodegenJob(request)`: validate the workspace; record a
+- [x] Implement `runCodegenJob(request)`: validate the workspace; record a
       `CodegenJob` (`queued` → `planning`); call
       `codegen.runJob(request, onStep → emit codegen-job-progress)`; on success
       **adopt** the produced `Revision` into the store (parent =
@@ -931,8 +933,8 @@ Decisions for this slice (resolved with the user):
       `ensureBuilt` (emits the build step + caches the dist path) and set
       `workspace.currentRevisionId`; mark the job `succeeded` / `failed`. Return
       the `CodegenJobResult`.
-- [ ] Add `listCodegenJobs(workspaceId)` / `getCodegenJob(id)` accessors.
-- [ ] **Unit tests**: with a **fake** `CodegenProvider` (+ the existing fake
+- [x] Add `listCodegenJobs(workspaceId)` / `getCodegenJob(id)` accessors.
+- [x] **Unit tests**: with a **fake** `CodegenProvider` (+ the existing fake
       repo / build / sandbox), assert `runCodegenJob` records the job, adopts +
       builds the new revision, advances `currentRevisionId`, emits
       `codegen-job-progress` for each step plus the build step, and that a
@@ -940,8 +942,8 @@ Decisions for this slice (resolved with the user):
 
 ### 6.4 Wiring & verification
 
-- [ ] Add `codegen` to the root `tsconfig.json` references.
-- [ ] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+- [x] Add `codegen` to the root `tsconfig.json` references.
+- [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
       `pnpm format:check`, and the `codegen` + orchestrator unit tests pass.
 - [ ] Commit: "Add host-run codegen with an agent-backed Generate flow."
 

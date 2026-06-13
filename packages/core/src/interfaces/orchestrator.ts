@@ -1,6 +1,7 @@
 import type { Session } from "../domain/entities.js";
 import type { RecoveryState } from "../domain/enums.js";
 import type { ApplicationId, RevisionId, SessionId, UserId, WorkspaceId } from "../domain/ids.js";
+import type { CodegenJobRequest, CodegenJobResult } from "../dto/codegen.js";
 import type { BuildDiagnostics, RuntimeDiagnostics } from "../types/diagnostics.js";
 
 /** Options for beginning a session against a user's workspace. */
@@ -43,6 +44,11 @@ export interface Orchestrator {
     startSession(options: StartSessionOptions): Promise<Session>;
     /** End a session, scaling the workspace's App Runtime to zero. */
     endSession(sessionId: SessionId): Promise<void>;
+    /**
+     * Run a codegen job against a workspace: drive the agent to produce a
+     * committed revision, build it, and advance the workspace to it.
+     */
+    runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult>;
     /** Report a build failure into the recovery machine. */
     reportBuildFailure(sessionId: SessionId, diagnostics: BuildDiagnostics): Promise<RecoveryState>;
     /** Report a runtime failure into the recovery machine. */

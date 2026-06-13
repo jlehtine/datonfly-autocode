@@ -5,6 +5,10 @@ import {
     type ApplicationId,
     type BuildOptions,
     type BuildResult,
+    type CodegenJobRequest,
+    type CodegenJobResult,
+    type CodegenProvider,
+    type CodegenStepEvent,
     type CommitInfo,
     type CommitOptions,
     type ControlPlaneEvent,
@@ -151,26 +155,58 @@ class FakeBuildProvider {
     }
 }
 
+/**
+ * A CodegenProvider that, on success, emits planned-diff + commit steps and
+ * returns a freshly minted revision id, without touching an agent or Git.
+ */
+class FakeCodegenProvider implements CodegenProvider {
+    succeed = true;
+    /** Revision id the next successful job reports; set to a valid uuid. */
+    revisionId = "33333333-3333-4333-8333-333333333333";
+
+    runJob(request: CodegenJobRequest, onStep?: (event: CodegenStepEvent) => void): Promise<CodegenJobResult> {
+        void request;
+        const planned: CodegenStepEvent = { step: "planned-diff", phase: "completed", ok: true, at: Date.now() };
+        onStep?.({ step: "planned-diff", phase: "started", at: Date.now() });
+        onStep?.(planned);
+        if (!this.succeed) {
+            return Promise.resolve({ succeeded: false, summary: "No changes.", steps: [planned] });
+        }
+        const commit: CodegenStepEvent = { step: "commit", phase: "completed", ok: true, at: Date.now() };
+        onStep?.({ step: "commit", phase: "started", at: Date.now() });
+        onStep?.(commit);
+        return Promise.resolve({
+            succeeded: true,
+            producedRevisionId: this.revisionId,
+            summary: "Added a button.",
+            steps: [planned, commit],
+        });
+    }
+}
+
 function setup(): {
     sandbox: FakeSandboxProvider;
     repo: FakeRepoProvider;
     build: FakeBuildProvider;
+    codegen: FakeCodegenProvider;
     events: ControlPlaneEvent[];
     orchestrator: ReturnType<typeof createOrchestrator>;
 } {
     const sandbox = new FakeSandboxProvider();
     const repo = new FakeRepoProvider();
     const build = new FakeBuildProvider();
+    const codegen = new FakeCodegenProvider();
     const events: ControlPlaneEvent[] = [];
     const orchestrator = createOrchestrator({
         sandbox,
         repo,
         build,
+        codegen,
         emit: (event) => events.push(event),
         healthGateAttempts: 1,
         healthGateIntervalMs: 0,
     });
-    return { sandbox, repo, build, events, orchestrator };
+    return { sandbox, repo, build, codegen, events, orchestrator };
 }
 
 describe("createOrchestrator", () => {
@@ -290,5 +326,84 @@ describe("createOrchestrator", () => {
         expect(await orchestrator.recover(session.id, "auto_repair")).toBe("recovered");
         // No rebuild happened.
         expect(build.builds).toHaveLength(1);
+    });
+
+    it("runs a codegen job: records it, adopts and builds the produced revision, and advances the workspace", async () => {
+        const { build, events, codegen, orchestrator } = setup();
+        const workspaceId = await orchestrator.provisionWorkspace({ applicationId: APP_ID, ownerId: USER_ID });
+        const baselineRevisionId = orchestrator.getWorkspace(workspaceId)?.currentRevisionId;
+
+        const result = await orchestrator.runCodegenJob({
+            workspaceId,
+            kind: "generate",
+            prompt: "Add a button",
+            context: [],
+        });
+
+        expect(result.succeeded).toBe(true);
+        expect(result.producedRevisionId).toBe(codegen.revisionId);
+
+        // The produced revision was adopted, built, and made current.
+        const current = orchestrator.getWorkspace(workspaceId)?.currentRevisionId;
+        expect(current).toBe(codegen.revisionId);
+        expect(current).not.toBe(baselineRevisionId);
+        const revisions = orchestrator.listRevisions(workspaceId);
+        expect(revisions[0]?.id).toBe(codegen.revisionId);
+        expect(revisions[0]?.buildStatus).toBe("succeeded");
+        expect(revisions[0]?.parentRevisionId).toBe(baselineRevisionId);
+        expect(revisions[0]?.originCodegenJobId).toBeDefined();
+        expect(build.builds).toHaveLength(1);
+
+        // The job is recorded as succeeded.
+        const jobs = orchestrator.listCodegenJobs(workspaceId);
+        expect(jobs).toHaveLength(1);
+        expect(jobs[0]?.status).toBe("succeeded");
+        expect(jobs[0]?.producedRevisionId).toBe(codegen.revisionId);
+        expect(jobs[0]?.branch).toBe(`codegen/${codegen.revisionId}`);
+
+        // Progress events were emitted for every step, including the build.
+        const progressSteps = events
+            .filter((e) => e.event === "codegen-job-progress")
+            .map((e) => `${e.step}:${e.phase}`);
+        expect(progressSteps).toContain("planned-diff:started");
+        expect(progressSteps).toContain("commit:completed");
+        expect(progressSteps).toContain("build:started");
+        expect(progressSteps).toContain("build:completed");
+        expect(result.steps.map((s) => `${s.step}:${s.phase}`)).toContain("build:completed");
+    });
+
+    it("deploys the generated revision on the next session start", async () => {
+        const { orchestrator, codegen } = setup();
+        const workspaceId = await orchestrator.provisionWorkspace({ applicationId: APP_ID, ownerId: USER_ID });
+        await orchestrator.runCodegenJob({ workspaceId, kind: "generate", prompt: "Add a button", context: [] });
+
+        const session = await orchestrator.startSession({ workspaceId, userId: USER_ID });
+
+        expect(session.status).toBe("active");
+        const deployments = orchestrator.listDeployments(workspaceId);
+        expect(deployments[0]?.status).toBe("healthy");
+        expect(deployments[0]?.revisionId).toBe(codegen.revisionId);
+    });
+
+    it("records a failed codegen job without advancing the workspace when the agent produces nothing", async () => {
+        const { codegen, build, orchestrator } = setup();
+        codegen.succeed = false;
+        const workspaceId = await orchestrator.provisionWorkspace({ applicationId: APP_ID, ownerId: USER_ID });
+        const baselineRevisionId = orchestrator.getWorkspace(workspaceId)?.currentRevisionId;
+
+        const result = await orchestrator.runCodegenJob({
+            workspaceId,
+            kind: "generate",
+            prompt: "Do nothing",
+            context: [],
+        });
+
+        expect(result.succeeded).toBe(false);
+        expect(result.producedRevisionId).toBeUndefined();
+        // The workspace stayed on the baseline; no build ran.
+        expect(orchestrator.getWorkspace(workspaceId)?.currentRevisionId).toBe(baselineRevisionId);
+        expect(orchestrator.listRevisions(workspaceId)).toHaveLength(1);
+        expect(build.builds).toHaveLength(0);
+        expect(orchestrator.listCodegenJobs(workspaceId)[0]?.status).toBe("failed");
     });
 });
