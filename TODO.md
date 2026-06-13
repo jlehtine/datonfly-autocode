@@ -1002,14 +1002,14 @@ review).**
 
 Steps:
 
-- [ ] **`core` contract.** Add `codegenJobWireSchema` (+ `CodegenJobWire`) to
+- [x] **`core` contract.** Add `codegenJobWireSchema` (+ `CodegenJobWire`) to
       `endpoints/schemas.ts`, mirroring the existing wire schemas (`id`,
       `workspaceId`, `kind`, `status`, `prompt`, `branch`,
       `producedRevisionId?`, `createdAt`, `completedAt?`); export it from
       `endpoints/index.ts` and the `core` barrel. The request schema, paths
       (`CODEGEN_JOBS_PATH` / `codegenJobPath`), result, and
       `codegen-job-progress` event already exist and are unchanged.
-- [ ] **Control-plane endpoint.** Add a `CodegenJobsController`
+- [x] **Control-plane endpoint.** Add a `CodegenJobsController`
       (`@Controller(CODEGEN_JOBS_PATH)`): `POST /` validates
       `codegenJobRequestSchema` (`kind: "generate"` this slice), calls
       `orchestrator.runCodegenJob`, and returns the recorded job as
@@ -1019,25 +1019,25 @@ Steps:
       (503 "codegen not configured"). Register it in `app.module.ts`. The
       gateway / event-bus already rebroadcast `codegen-job-progress` — no
       transport change.
-- [ ] **Composition root.** In `main.ts`, construct and inject the
+- [x] **Composition root.** In `main.ts`, construct and inject the
       `HostCodegenProvider` only when an agent is configured (gate on the §6.7
       agent factory / env); otherwise leave `codegen` unset.
-- [ ] **Control-plane unit test** (Nest, fake orchestrator): `POST` records a
+- [x] **Control-plane unit test** (Nest, fake orchestrator): `POST` records a
       job and returns the wire shape; `GET /:id` returns it; the
       missing-provider path yields the configured 503. No real agent.
-- [ ] **Shell client.** Add `startCodegenJob(prompt, workspaceId)` and
+- [x] **Shell client.** Add `startCodegenJob(prompt, workspaceId)` and
       `getCodegenJob(id)` to `control-plane/client.ts` using `CODEGEN_JOBS_PATH`
       / `codegenJobPath` and `codegenJobWireSchema`.
-- [ ] **Shell progress.** Extend `useControlPlaneSession` (or a small sibling
+- [x] **Shell progress.** Extend `useControlPlaneSession` (or a small sibling
       hook) to subscribe to `codegen-job-progress` for the active job and expose
       an ordered `steps` list plus running / succeeded / failed status; the
       resulting `deployment-state-changed` already repoints the iframe.
-- [ ] **Shell trigger.** Add a minimal MUI `GeneratePanel` (prompt field +
+- [x] **Shell trigger.** Add a minimal MUI `GeneratePanel` (prompt field +
       submit + live step list) alongside `SessionPanel` / `RecoveryPanel`.
       Embedded-chat binding stays out of scope.
-- [ ] **Verify.** `pnpm build`, `pnpm lint`, `pnpm format:check`, and the
+- [x] **Verify.** `pnpm build`, `pnpm lint`, `pnpm format:check`, and the
       control-plane + Shell unit tests pass. No real LLM calls.
-- [ ] **Docs.** Update the `USE-CASES.md` Generate entry: the control-plane
+- [x] **Docs.** Update the `USE-CASES.md` Generate entry: the control-plane
       endpoint and Shell trigger move planned → implemented; note that real
       generation remains gated on the concrete agent (§6.7).
 - [ ] Commit: "Surface Generate through the control-plane and Shell."

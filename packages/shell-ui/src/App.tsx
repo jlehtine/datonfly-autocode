@@ -6,6 +6,7 @@ import type { RecoveryChoice } from "@datonfly-autocode/core";
 import type { BridgeHost } from "./bridge/host.js";
 import { AppFrame } from "./components/AppFrame.js";
 import { ChatPanel } from "./components/ChatPanel.js";
+import { GeneratePanel } from "./components/GeneratePanel.js";
 import { RecoveryPanel } from "./components/RecoveryPanel.js";
 import { SessionPanel } from "./components/SessionPanel.js";
 import { useControlPlaneSession } from "./control-plane/useControlPlaneSession.js";
@@ -35,7 +36,7 @@ export function App(): React.JSX.Element {
     const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
     const theme = useMemo(() => createTheme({ palette: { mode: prefersDark ? "dark" : "light" } }), [prefersDark]);
 
-    const { state: sessionState, recover } = useControlPlaneSession();
+    const { state: sessionState, codegen, recover, generate } = useControlPlaneSession();
     const { callbacks } = useAppSession();
     const [host, setHost] = useState<BridgeHost | null>(null);
     const onHost = useCallback((next: BridgeHost | null) => {
@@ -46,6 +47,12 @@ export function App(): React.JSX.Element {
             void recover(choice);
         },
         [recover],
+    );
+    const onGenerate = useCallback(
+        (prompt: string) => {
+            void generate(prompt);
+        },
+        [generate],
     );
 
     const appUrl = sessionState.appRuntimeUrl ?? "";
@@ -79,6 +86,11 @@ export function App(): React.JSX.Element {
                     <Divider />
                     <Box sx={{ display: "flex", flexWrap: "wrap" }}>
                         <SessionPanel state={sessionState} />
+                        <GeneratePanel
+                            state={codegen}
+                            disabled={sessionState.workspaceId === undefined}
+                            onGenerate={onGenerate}
+                        />
                         <RecoveryPanel host={host} onRecover={onRecover} />
                     </Box>
                 </Box>

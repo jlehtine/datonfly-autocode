@@ -42,6 +42,18 @@ import {
 const DEFAULT_RESOURCE_LIMITS: ResourceLimits = { cpu: "500m", memory: "256Mi" };
 
 /**
+ * Thrown by {@link Orchestrator.runCodegenJob} when no codegen provider is
+ * configured. The control-plane surfaces this as a clean "codegen not
+ * configured" response rather than an internal error.
+ */
+export class NoCodegenProviderError extends Error {
+    constructor() {
+        super("No codegen provider is configured for this orchestrator");
+        this.name = "NoCodegenProviderError";
+    }
+}
+
+/**
  * Template every workspace is provisioned from until an Application registry
  * lands. The local-git repo provider resolves the actual seed from its own
  * configured path; only `owner` / `templateVersion` are recorded here.
@@ -451,7 +463,7 @@ export function createOrchestrator(options: OrchestratorOptions): InMemoryOrches
 
         async runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult> {
             if (!codegen) {
-                throw new Error("No codegen provider is configured for this orchestrator");
+                throw new NoCodegenProviderError();
             }
             const workspaceId = workspaceIdSchema.parse(request.workspaceId);
             const workspace = requireWorkspace(workspaceId);

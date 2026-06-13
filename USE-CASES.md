@@ -28,15 +28,19 @@ built, deployable revision of their application variant.
 **Status:** _partial._ The host-run generation cycle — agent-driven file edits,
 commit/integrate/tag, revision adoption, and deployment build — is implemented
 and unit-tested in the `codegen` and `orchestrator` packages. The control-plane
-endpoint, the embedded-chat trigger and progress streaming, the in-sandbox inner
-loop, and the concrete agent wiring are **planned** (see _Deferred_ below).
+Generate endpoint and the Shell trigger with progress streaming are implemented:
+the Shell can submit a prompt and observe `codegen-job-progress` steps. Because
+no concrete agent is wired yet, the endpoint returns **503** until a
+`CodegenProvider` is injected. The in-sandbox inner loop and the concrete agent
+wiring remain **planned** (see _Deferred_ below).
 
 ### Actors & trigger
 
 - **Actor:** an authenticated end user working on their own application variant.
-- **Trigger:** the user submits a Generate prompt (today via a direct
-  `Orchestrator.runCodegenJob` call; the Shell embedded-chat trigger is
-  planned). One call represents exactly **one generation cycle** — prompt to a
+- **Trigger:** the user submits a Generate prompt from the Shell's Generate
+  panel, which `POST`s to the control-plane Generate endpoint; the controller
+  calls `Orchestrator.runCodegenJob`. (The richer embedded-chat trigger remains
+  planned.) One call represents exactly **one generation cycle** — prompt to a
   committed, built revision. The multi-turn interactive clarification loop (the
   agent asking follow-up questions) is owned by the assistant runtime and the
   embedded chat, not by `runCodegenJob`.
@@ -94,9 +98,13 @@ injected `RepoProvider` / `BuildProvider` / `IAgentProvider`. See
    the committed revision rather than trusting sandbox output (important once
    codegen runs in a less-trusted sandbox). The agent's inner loop is planned.
 6. **Progress.** Each provider step is forwarded as a `codegen-job-progress`
-   control-plane event; observers (today tests, later the Shell) see
-   `planned-diff`, `commit`, and the build step in order. Accessors
-   `listCodegenJobs(workspaceId)` / `getCodegenJob(id)` expose recorded jobs.
+   control-plane event; the Shell's Generate panel subscribes over the Socket.io
+   gateway and renders `planned-diff`, `commit`, and the build step in order.
+   Accessors `listCodegenJobs(workspaceId)` / `getCodegenJob(id)` expose
+   recorded jobs; the control-plane exposes them at the `codegen-jobs` endpoint
+   (`POST` to run, `GET` to list/fetch). When no `CodegenProvider` is configured
+   the orchestrator throws `NoCodegenProviderError`, which the controller maps
+   to HTTP **503**.
 
 **Ownership split.** Generation writes only application-owned files; the
 framework owns commit/integrate/tag, revision adoption, and the deployment
@@ -119,8 +127,8 @@ application-owned partition).
 
 ### Deferred (planned)
 
-- Control-plane Generate endpoint and `codegen-job-progress` streaming over
-  WebSocket; binding the embedded chat to trigger Generate and show progress.
+- Binding the richer **embedded chat** (vs. the minimal Generate panel) to
+  trigger Generate and show progress inline.
 - In-sandbox codegen container replacing the host run, where the provider
   absorbs build/deploy and the agent gains **inner-loop build/test** tools for
   self-validation and iteration.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { io } from "socket.io-client";
 
 import {
@@ -11,7 +11,7 @@ import {
     type StartSessionResponse,
 } from "@datonfly-autocode/core";
 
-import { listWorkspaces, recoverSession, startSession } from "./client.js";
+import { listWorkspaces, recoverSession, startCodegenJob, startSession } from "./client.js";
 
 /** Coarse status of the control-plane session, including pre-start/error phases. */
 export type ControlPlaneStatus = "initializing" | SessionStatus | "error";
@@ -41,6 +41,77 @@ const INITIAL_STATE: ControlPlaneSessionState = {
     error: undefined,
 };
 
+/** A discrete codegen step rendered in the Generate panel. */
+export interface CodegenStepView {
+    /** Which step the agent / orchestrator reported. */
+    step: "planned-diff" | "commit" | "build" | "deploy";
+    /** Whether the step started or completed. */
+    phase: "started" | "completed";
+    /** Success flag carried on completed steps that can fail (e.g. build). */
+    ok?: boolean;
+}
+
+/** Coarse status of a Generate run. */
+export type CodegenRunStatus = "idle" | "running" | "succeeded" | "failed";
+
+/** Live state of the most recent Generate run. */
+export interface CodegenState {
+    /** Current run status. */
+    status: CodegenRunStatus;
+    /** Recorded job id, known once the run settles. */
+    jobId: string | undefined;
+    /** Ordered steps streamed over the lifetime of the active run. */
+    steps: CodegenStepView[];
+    /** Failure detail when {@link status} is `failed`. */
+    error: string | undefined;
+}
+
+/** Initial (idle) Generate state. */
+export const initialCodegenState: CodegenState = {
+    status: "idle",
+    jobId: undefined,
+    steps: [],
+    error: undefined,
+};
+
+/** Actions folded into {@link CodegenState} by {@link codegenReducer}. */
+export type CodegenAction =
+    | { type: "submit" }
+    | { type: "progress"; step: CodegenStepView["step"]; phase: CodegenStepView["phase"]; ok?: boolean }
+    | { type: "settled"; status: "succeeded" | "failed"; jobId?: string; error?: string };
+
+/**
+ * Fold codegen progress and lifecycle actions into the Generate state.
+ *
+ * Progress events are accepted only while a run is in flight (a single active
+ * Generate at a time this slice), so they need no job-id filtering before the
+ * POST resolves with the recorded job.
+ */
+export function codegenReducer(state: CodegenState, action: CodegenAction): CodegenState {
+    switch (action.type) {
+        case "submit":
+            return { status: "running", jobId: undefined, steps: [], error: undefined };
+        case "progress":
+            if (state.status !== "running") {
+                return state;
+            }
+            return {
+                ...state,
+                steps: [
+                    ...state.steps,
+                    { step: action.step, phase: action.phase, ...(action.ok !== undefined ? { ok: action.ok } : {}) },
+                ],
+            };
+        case "settled":
+            return {
+                ...state,
+                status: action.status,
+                ...(action.jobId !== undefined ? { jobId: action.jobId } : {}),
+                ...(action.error !== undefined ? { error: action.error } : {}),
+            };
+    }
+}
+
 /**
  * Single-flight start of the demo session.
  *
@@ -69,13 +140,17 @@ function ensureSession(): Promise<StartSessionResponse> {
  * updates and starts a session against the first workspace, exposing the
  * resulting status, recovery state, and App Runtime URL. The returned
  * {@link recover} action POSTs a recovery choice and folds the updated session
- * back into state.
+ * back into state; {@link generate} POSTs a Generate prompt and tracks its live
+ * progress (streamed as `codegen-job-progress`).
  */
 export function useControlPlaneSession(): {
     state: ControlPlaneSessionState;
+    codegen: CodegenState;
     recover: (choice: RecoveryChoice) => Promise<void>;
+    generate: (prompt: string) => Promise<void>;
 } {
     const [state, setState] = useState<ControlPlaneSessionState>(INITIAL_STATE);
+    const [codegen, dispatchCodegen] = useReducer(codegenReducer, initialCodegenState);
 
     useEffect(() => {
         let active = true;
@@ -93,6 +168,13 @@ export function useControlPlaneSession(): {
                 setState((prev) => ({ ...prev, status: event.status }));
             } else if (event.event === "recovery-state-changed" && event.sessionId === currentSessionId) {
                 setState((prev) => ({ ...prev, recoveryState: event.state }));
+            } else if (event.event === "codegen-job-progress") {
+                dispatchCodegen({
+                    type: "progress",
+                    step: event.step,
+                    phase: event.phase,
+                    ...(event.ok !== undefined ? { ok: event.ok } : {}),
+                });
             } else if (
                 event.event === "deployment-state-changed" &&
                 event.workspaceId === currentWorkspaceId &&
@@ -149,5 +231,29 @@ export function useControlPlaneSession(): {
         [state.sessionId],
     );
 
-    return { state, recover };
+    const generate = useCallback(
+        async (prompt: string): Promise<void> => {
+            if (!state.workspaceId) {
+                return;
+            }
+            dispatchCodegen({ type: "submit" });
+            try {
+                const job = await startCodegenJob(prompt, state.workspaceId);
+                dispatchCodegen({
+                    type: "settled",
+                    status: job.status === "succeeded" ? "succeeded" : "failed",
+                    jobId: job.id,
+                });
+            } catch (error) {
+                dispatchCodegen({
+                    type: "settled",
+                    status: "failed",
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        },
+        [state.workspaceId],
+    );
+
+    return { state, codegen, recover, generate };
 }

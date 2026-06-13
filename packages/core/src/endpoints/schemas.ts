@@ -80,6 +80,30 @@ export const deploymentWireSchema = z.object({
 /** A deployment parsed from its JSON wire representation. */
 export type DeploymentWire = z.infer<typeof deploymentWireSchema>;
 
+// ─── Codegen job wire format ───
+
+/** Wire schema for a codegen job as serialized over JSON. */
+export const codegenJobWireSchema = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    sessionId: z.string().nullable().optional(),
+    kind: z.enum(["generate", "repair"]),
+    prompt: z.string(),
+    branch: z.string(),
+    status: z.enum(["queued", "planning", "committing", "building", "deploying", "succeeded", "failed"]),
+    producedRevisionId: z.string().nullable().optional(),
+    repairTargetRevisionId: z.string().nullable().optional(),
+    createdAt: z.string().transform((s) => new Date(s)),
+    completedAt: z
+        .string()
+        .transform((s) => new Date(s))
+        .nullable()
+        .optional(),
+});
+
+/** A codegen job parsed from its JSON wire representation. */
+export type CodegenJobWire = z.infer<typeof codegenJobWireSchema>;
+
 // ─── Responses ───
 
 /**

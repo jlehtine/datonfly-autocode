@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Post, Query, ServiceUnavailableException } from "@nestjs/common";
 
 import type {
+    CodegenJob,
     Deployment,
     Revision,
     Session,
@@ -10,6 +11,9 @@ import type {
 } from "@datonfly-autocode/core";
 import {
     applicationIdSchema,
+    codegenJobIdSchema,
+    codegenJobRequestSchema,
+    CODEGEN_JOBS_PATH,
     recoveryRequestSchema,
     revisionIdSchema,
     sessionIdSchema,
@@ -19,7 +23,7 @@ import {
     workspaceIdSchema,
     WORKSPACES_PATH,
 } from "@datonfly-autocode/core";
-import type { InMemoryOrchestrator } from "@datonfly-autocode/orchestrator";
+import { NoCodegenProviderError, type InMemoryOrchestrator } from "@datonfly-autocode/orchestrator";
 
 import { DEMO_USER_ID, ORCHESTRATOR } from "./tokens.js";
 
@@ -114,5 +118,56 @@ export class SessionsController {
             throw new Error(`Session ${id} not found`);
         }
         return session;
+    }
+}
+
+/**
+ * REST surface for the Generate (codegen) flow.
+ *
+ * `POST` runs a generation cycle to completion and returns the recorded job;
+ * live progress is streamed separately as `codegen-job-progress` over the
+ * Socket.io gateway. When no codegen provider is configured, the orchestrator's
+ * {@link NoCodegenProviderError} is surfaced as a 503 rather than an internal
+ * error.
+ */
+@Controller(CODEGEN_JOBS_PATH)
+export class CodegenJobsController {
+    constructor(@Inject(ORCHESTRATOR) private readonly orchestrator: InMemoryOrchestrator) {}
+
+    /** Run a Generate job against a workspace and return the recorded job. */
+    @Post()
+    async generate(@Body() body: unknown): Promise<CodegenJob> {
+        const request = codegenJobRequestSchema.parse(body);
+        const workspaceId = workspaceIdSchema.parse(request.workspaceId);
+        const before = new Set(this.orchestrator.listCodegenJobs(workspaceId).map((job) => job.id));
+        try {
+            await this.orchestrator.runCodegenJob(request);
+        } catch (error) {
+            if (error instanceof NoCodegenProviderError) {
+                throw new ServiceUnavailableException("Codegen is not configured");
+            }
+            throw error;
+        }
+        const job = this.orchestrator.listCodegenJobs(workspaceId).find((candidate) => !before.has(candidate.id));
+        if (!job) {
+            throw new Error("Codegen job was not recorded");
+        }
+        return job;
+    }
+
+    /** List a workspace's codegen jobs, newest first. */
+    @Get()
+    list(@Query("workspaceId") workspaceId: string): CodegenJob[] {
+        return this.orchestrator.listCodegenJobs(workspaceIdSchema.parse(workspaceId));
+    }
+
+    /** Fetch a single codegen job by id. */
+    @Get(":id")
+    get(@Param("id") id: string): CodegenJob {
+        const job = this.orchestrator.getCodegenJob(codegenJobIdSchema.parse(id));
+        if (!job) {
+            throw new Error(`Codegen job ${id} not found`);
+        }
+        return job;
     }
 }

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 import {
+    CODEGEN_JOBS_PATH,
+    codegenJobPath,
+    codegenJobWireSchema,
     recoveryRequestSchema,
     sessionPath,
     sessionRecoveryPath,
@@ -9,6 +12,7 @@ import {
     startSessionResponseSchema,
     WORKSPACES_PATH,
     workspaceWireSchema,
+    type CodegenJobWire,
     type RecoveryChoice,
     type SessionWire,
     type StartSessionResponse,
@@ -70,4 +74,24 @@ export async function recoverSession(
         body: JSON.stringify(body),
     });
     return sessionWireSchema.parse(data);
+}
+
+/**
+ * Run a Generate job against a workspace and return the recorded job.
+ *
+ * The request resolves only once the generation cycle completes; live progress
+ * arrives separately as `codegen-job-progress` over the Socket.io connection.
+ */
+export async function startCodegenJob(prompt: string, workspaceId: string): Promise<CodegenJobWire> {
+    const data = await requestJson(CODEGEN_JOBS_PATH, {
+        method: "POST",
+        body: JSON.stringify({ workspaceId, kind: "generate", prompt, context: [] }),
+    });
+    return codegenJobWireSchema.parse(data);
+}
+
+/** Fetch a single codegen job by id. */
+export async function getCodegenJob(jobId: string): Promise<CodegenJobWire> {
+    const data = await requestJson(codegenJobPath(jobId));
+    return codegenJobWireSchema.parse(data);
 }

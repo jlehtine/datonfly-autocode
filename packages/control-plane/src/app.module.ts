@@ -5,7 +5,7 @@ import { LoggerModule } from "nestjs-pino";
 import type { UserId } from "@datonfly-autocode/core";
 import type { InMemoryOrchestrator } from "@datonfly-autocode/orchestrator";
 
-import { SessionsController, WorkspacesController } from "./control-plane.controller.js";
+import { CodegenJobsController, SessionsController, WorkspacesController } from "./control-plane.controller.js";
 import { ControlPlaneGateway } from "./control-plane.gateway.js";
 import type { ControlPlaneEventBus } from "./event-bus.js";
 import { DEMO_USER_ID, EVENT_BUS, ORCHESTRATOR } from "./tokens.js";
@@ -37,7 +37,7 @@ export class ControlPlaneModule {
                     },
                 }),
             ],
-            controllers: [WorkspacesController, SessionsController],
+            controllers: [WorkspacesController, SessionsController, CodegenJobsController],
             providers: [
                 ControlPlaneGateway,
                 { provide: ORCHESTRATOR, useValue: options.orchestrator },

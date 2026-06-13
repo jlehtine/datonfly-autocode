@@ -4,4 +4,5 @@
 // SandboxProvider through the session lifecycle and emits control-plane events.
 
 export { createOrchestrator } from "./orchestrator.js";
+export { NoCodegenProviderError } from "./orchestrator.js";
 export type { ControlPlaneEventSink, InMemoryOrchestrator, OrchestratorOptions } from "./orchestrator.js";

@@ -8,7 +8,7 @@ import { Logger, LoggerErrorInterceptor } from "nestjs-pino";
 import pino from "pino";
 
 import { HostBuildProvider } from "@datonfly-autocode/build-deploy";
-import { applicationIdSchema, type ProviderLogger } from "@datonfly-autocode/core";
+import { applicationIdSchema, type CodegenProvider, type ProviderLogger } from "@datonfly-autocode/core";
 import { createOrchestrator } from "@datonfly-autocode/orchestrator";
 import { LocalGitRepoProvider } from "@datonfly-autocode/repo-git";
 import { DockerSandboxProvider } from "@datonfly-autocode/sandbox-docker";
@@ -24,6 +24,18 @@ const DEMO_USER_ID = "demo-user";
 
 /** Monorepo root, resolved from this module's compiled location (`packages/control-plane/dist/main.js`). */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
+/**
+ * Resolve the codegen provider that backs the Generate flow.
+ *
+ * Codegen is wired only when an agent is configured. The concrete
+ * `LangGraphAgent` and the `HostCodegenProvider` it drives land in §6.7; until
+ * then this returns `undefined`, leaving `codegen` unset on the orchestrator so
+ * the Generate endpoint surfaces a clean "codegen not configured" (503).
+ */
+function resolveCodegenProvider(): CodegenProvider | undefined {
+    return undefined;
+}
 
 async function bootstrap(): Promise<void> {
     const providerLogger: ProviderLogger = pino({
@@ -56,10 +68,12 @@ async function bootstrap(): Promise<void> {
 
     const sandbox = new DockerSandboxProvider({ logger: providerLogger.child({ component: "sandbox-docker" }) });
     const eventBus = new ControlPlaneEventBus();
+    const codegen = resolveCodegenProvider();
     const orchestrator = createOrchestrator({
         repo,
         build,
         sandbox,
+        ...(codegen ? { codegen } : {}),
         emit: (event) => {
             eventBus.emit(event);
         },
