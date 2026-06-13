@@ -968,16 +968,119 @@ Decisions for this slice (resolved with the user):
       **not** instruct the agent to always read it; let it decide when the
       information is needed.
 
+### 6.6 Surface Generate through the control-plane and Shell
+
+Make the Phase 6 codegen reachable end-to-end: a control-plane Generate
+endpoint, `codegen-job-progress` streamed to the browser, and a minimal Shell
+trigger + progress display. This continues the Operate → Generate story already
+present in the Shell.
+
+**Scoping decisions (made autonomously while the user was unavailable — flag for
+review).**
+
+- **Split from the concrete agent.** This slice ships only the _surface_; wiring
+  the real `LangGraphAgent` is the separate §6.7. Rationale: the surface is
+  fully testable with fakes (mirroring the orchestrator's `FakeCodegenProvider`)
+  and carries no LLM rate-limit or dual-zod risk, whereas the concrete agent
+  does (see the §6.7 interop note). Keeping them apart preserves the small,
+  unit-testable slice discipline.
+- **Runtime injection is agent-gated.** `main.ts` injects the
+  `HostCodegenProvider` only when an agent is configured (the §6.7 factory /
+  env); otherwise `codegen` stays unset and the Generate endpoint surfaces the
+  orchestrator's existing rejection as a clean HTTP error (e.g. 503 "codegen not
+  configured"). This keeps §6.6 honest and runnable without a model.
+- **Minimal trigger UX.** A dedicated Generate panel (prompt field + submit +
+  live step list), _not_ binding the embedded assistant chat — full chat-driven
+  generation stays deferred.
+- **Reuse the existing transport.** The Socket.io event bus / gateway already
+  rebroadcasts `codegen-job-progress`; the Shell hook folds those step events
+  into state. No new channel.
+- **Verification without LLM calls.** Control-plane controller unit test over a
+  fake orchestrator / provider; Shell client + hook unit coverage where
+  practical; manual end-to-end check. Autocode has no Playwright harness yet
+  (Phase 9), so no E2E this slice.
+
+Steps:
+
+- [ ] **`core` contract.** Add `codegenJobWireSchema` (+ `CodegenJobWire`) to
+      `endpoints/schemas.ts`, mirroring the existing wire schemas (`id`,
+      `workspaceId`, `kind`, `status`, `prompt`, `branch`,
+      `producedRevisionId?`, `createdAt`, `completedAt?`); export it from
+      `endpoints/index.ts` and the `core` barrel. The request schema, paths
+      (`CODEGEN_JOBS_PATH` / `codegenJobPath`), result, and
+      `codegen-job-progress` event already exist and are unchanged.
+- [ ] **Control-plane endpoint.** Add a `CodegenJobsController`
+      (`@Controller(CODEGEN_JOBS_PATH)`): `POST /` validates
+      `codegenJobRequestSchema` (`kind: "generate"` this slice), calls
+      `orchestrator.runCodegenJob`, and returns the recorded job as
+      `codegenJobWireSchema`; `GET /:id` → `getCodegenJob`; `GET /` (scoped by
+      `workspaceId` query) → `listCodegenJobs`. When no codegen provider is
+      configured, translate the orchestrator's rejection into a clean HTTP error
+      (503 "codegen not configured"). Register it in `app.module.ts`. The
+      gateway / event-bus already rebroadcast `codegen-job-progress` — no
+      transport change.
+- [ ] **Composition root.** In `main.ts`, construct and inject the
+      `HostCodegenProvider` only when an agent is configured (gate on the §6.7
+      agent factory / env); otherwise leave `codegen` unset.
+- [ ] **Control-plane unit test** (Nest, fake orchestrator): `POST` records a
+      job and returns the wire shape; `GET /:id` returns it; the
+      missing-provider path yields the configured 503. No real agent.
+- [ ] **Shell client.** Add `startCodegenJob(prompt, workspaceId)` and
+      `getCodegenJob(id)` to `control-plane/client.ts` using `CODEGEN_JOBS_PATH`
+      / `codegenJobPath` and `codegenJobWireSchema`.
+- [ ] **Shell progress.** Extend `useControlPlaneSession` (or a small sibling
+      hook) to subscribe to `codegen-job-progress` for the active job and expose
+      an ordered `steps` list plus running / succeeded / failed status; the
+      resulting `deployment-state-changed` already repoints the iframe.
+- [ ] **Shell trigger.** Add a minimal MUI `GeneratePanel` (prompt field +
+      submit + live step list) alongside `SessionPanel` / `RecoveryPanel`.
+      Embedded-chat binding stays out of scope.
+- [ ] **Verify.** `pnpm build`, `pnpm lint`, `pnpm format:check`, and the
+      control-plane + Shell unit tests pass. No real LLM calls.
+- [ ] **Docs.** Update the `USE-CASES.md` Generate entry: the control-plane
+      endpoint and Shell trigger move planned → implemented; note that real
+      generation remains gated on the concrete agent (§6.7).
+- [ ] Commit: "Surface Generate through the control-plane and Shell."
+
+### 6.7 Wire the concrete codegen agent
+
+The LLM-sensitive follow-up that makes Generate do real work. **Carries the
+dual-zod tool-schema interop hazard** recorded in repo memory: the real
+`LangGraphAgent` runs `zod → json-schema` on the file tools' schemas at runtime,
+so the tools' zod instance must match the agent's (the §6.4 boundary cast only
+satisfies the type checker, not the runtime conversion).
+
+Steps:
+
+- [ ] **Agent factory.** Construct the concrete `LangGraphAgent` from
+      `@datonfly-assistant/core` (model / key / config from env) and inject it
+      into the `HostCodegenProvider` in `main.ts` (the gate from §6.6).
+- [ ] **Resolve the zod interop.** Ensure the file tools' schemas are converted
+      to JSON Schema with the _same_ zod the agent uses — either align the
+      linked assistant's zod with autocode's, or convert the tool schemas to
+      JSON Schema at the boundary before handing them to the agent. Confirm the
+      agent actually receives usable tool definitions.
+- [ ] **Scope.** File tools only this slice; real application-control /
+      customization tools + MCP servers stay deferred.
+- [ ] **Verify.** The fake-agent unit tests remain the automated guard; exercise
+      the real agent manually (no automated LLM calls). Optionally add a gated /
+      skipped integration test.
+- [ ] **Docs.** Update the `USE-CASES.md` Generate entry: real generation now
+      implemented; richer tools / MCP and the in-sandbox loop still planned.
+- [ ] Commit: "Wire the concrete codegen agent for host-run Generate."
+
 ### Deferred to a later slice
 
-- [ ] Control-plane Generate endpoint + `codegen-job-progress` over WS, and
-      binding the embedded chat to trigger Generate and stream progress.
+- [ ] Bind the embedded assistant chat to trigger Generate and stream progress
+      (the minimal Generate panel + endpoint land in §6.6; full chat-driven
+      generation is later).
 - [ ] In-sandbox codegen container (codegen image, in-container git/push, MCP
       servers) replacing the host run; the provider absorbs build/deploy, and
       the agent gains **inner-loop build/test** tools (compile/run tests while
       generating) for self-validation and iteration.
-- [ ] Wire the concrete `LangGraphAgent` (model / key / config) + real
-      application-control / customization tools + MCP servers.
+- [ ] Real application-control / customization tools + MCP servers for the
+      codegen agent (the bare concrete agent lands in §6.7; this slice ships
+      file tools only).
 - [ ] Repair flow (`kind: "repair"`) feeding build / runtime diagnostics back to
       the agent — lands with the Phase 7 recovery loop.
 - [ ] Per-user backend-service generation (UI-only this slice).
