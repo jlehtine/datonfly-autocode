@@ -341,6 +341,8 @@ Decisions for this slice (resolved with the user):
   `chat-client`, and `chat-ui-mui` are consumed as `link:` dependencies on the
   sibling `../datonfly-assistant` workspace (which must be built first). This is
   a temporary dev-only arrangement; a published/registry approach comes later.
+  _Update:_ those packages are now published to `npm.jlehtinen.net` at 0.0.1, so
+  the registry approach is unblocked — see §3.7.
 - **Assistant runs from its own stack.** The assistant backend runs from the
   sibling repo with its normal dev setup (`docker compose up -d` + `pnpm dev`);
   the Shell proxies the assistant API to it. No autocode-side Postgres or extra
@@ -420,6 +422,25 @@ Decisions for this slice (resolved with the user):
 - [x] Commit: "Add the Shell with a sandboxed application frame and assistant
       chat."
 
+### 3.7 Consume the assistant packages from the private registry (now unblocked)
+
+The sibling assistant packages are now published to `npm.jlehtinen.net` at
+0.0.1, so the temporary cross-repo `link:` arrangement can be replaced with a
+registry dependency. This removes the "build the sibling repo first" step for
+the chat UI (the assistant _backend_ still runs from the sibling repo until it
+is folded into the orchestrated dev/deploy setup — deferred below).
+
+- [ ] Add a scoped-registry `.npmrc` mapping
+      `@datonfly-assistant:registry=https://npm.jlehtinen.net` (provide the auth
+      token via an env var; never commit credentials).
+- [ ] Replace the three `@datonfly-assistant/*` `link:` deps in
+      `packages/shell-ui/package.json` with `^0.0.1` registry ranges; run
+      `pnpm install` and confirm `pnpm build` + the `shell-ui` tests still pass.
+- [ ] Update `INSTALL.md`: the chat UI packages now resolve from the registry,
+      so building the sibling `datonfly-assistant` packages first is no longer
+      required (only the assistant backend dev setup remains).
+- [ ] Commit: "Consume the assistant chat packages from the private registry."
+
 ### Deferred to a later slice
 
 - [ ] Bind the chat/assistant to the application: Operate dispatch and the
@@ -430,9 +451,8 @@ Decisions for this slice (resolved with the user):
   4 (§4.5).
 - [ ] Workspace provisioning / selection UI (Phase 5; Phase 4 still uses a
       hard-coded seeded workspace).
-- [ ] Replace the cross-repo `link:` chat dependencies with a published/registry
-      consumption model, and fold the assistant backend into the real
-      orchestrated dev/deploy setup.
+- [ ] Fold the assistant backend into the real orchestrated dev/deploy setup
+      (the `link:` → registry chat-dependency migration is now §3.7).
 
 ---
 
@@ -802,6 +822,18 @@ Decisions for this slice (resolved with the user):
 
 Resolutions to previously open design questions (recorded here):
 
+- **Private dev-environment registries.** The local development environment
+  provides a private npm registry and Docker registry (currently
+  `npm.jlehtinen.net` / `docker.jlehtinen.net`). The npm registry already hosts
+  the `@datonfly-assistant/*` consumable packages (`core`, `chat-client`,
+  `chat-ui-mui`) at 0.0.1, which unblocks replacing the Shell's cross-repo
+  `link:` chat dependencies with registry ranges (§3.7). These are
+  **dev-environment infrastructure only**: Autocode itself stays
+  registry-agnostic and consumes whatever package/image registries the target
+  deploy environment provides, so the controlled-registry consumption model and
+  template-repo dependency rewrites are configured per environment rather than
+  pinned to these hosts. Auth tokens are supplied via env / `.npmrc` and never
+  committed.
 - **Kubernetes target.** Production targets **any full-featured Kubernetes
   cluster** (managed or local). Dev and e2e run on **Kind** with a
   policy-enforcing CNI (**Cilium** preferred; Calico acceptable). A real
