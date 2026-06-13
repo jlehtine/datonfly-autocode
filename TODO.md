@@ -1052,20 +1052,28 @@ satisfies the type checker, not the runtime conversion).
 
 Steps:
 
-- [ ] **Agent factory.** Construct the concrete `AnthropicAgent` from
-      `@datonfly-assistant/core` (model / key / config from env) and inject it
-      into the `HostCodegenProvider` in `main.ts` (the gate from §6.6).
-- [ ] **Resolve the zod interop.** Ensure the file tools' schemas are converted
-      to JSON Schema with the _same_ zod the agent uses — either align the
-      linked assistant's zod with autocode's, or convert the tool schemas to
-      JSON Schema at the boundary before handing them to the agent. Confirm the
-      agent actually receives usable tool definitions.
-- [ ] **Scope.** File tools only this slice; real application-control /
+- [x] **Agent factory.** Construct the concrete `AnthropicAgent` from
+      `@datonfly-assistant/agent-langchain` (model / key / config from env) and
+      inject it into the `HostCodegenProvider` in `main.ts` (the gate from
+      §6.6). Env-gated: enabled only when `ANTHROPIC_API_KEY` **and** a model
+      (`DF_CODEGEN_MODEL`, falling back to `ANTHROPIC_MODEL`) are set; otherwise
+      codegen stays unset and the endpoint keeps returning 503.
+- [x] **Resolve the zod interop.** No boundary conversion needed: the linked
+      assistant's `@langchain/core` detects zod v4 schemas structurally
+      (`"_zod" in schema`) and converts via the stable `zod/v4/core`
+      `toJSONSchema`, so an autocode zod 4.4.3 file-tool schema converts
+      correctly under the assistant's zod 4.3.6. Verified out-of-band by running
+      the file tools' schemas through the same `toJsonSchema` the agent's
+      `bindTools` uses (all four tools → valid JSON Schema). The
+      `as unknown as ITool[]` cast is the compile side only.
+- [x] **Scope.** File tools only this slice; real application-control /
       customization tools + MCP servers stay deferred.
-- [ ] **Verify.** The fake-agent unit tests remain the automated guard; exercise
-      the real agent manually (no automated LLM calls). Optionally add a gated /
-      skipped integration test.
-- [ ] **Docs.** Update the `USE-CASES.md` Generate entry: real generation now
+- [x] **Verify.** Fake-agent unit tests pass (codegen 10/10) and remain the
+      automated guard; control-plane builds with a capped heap (no dual-zod
+      OOM); the zod→json-schema boundary was exercised manually. A real
+      end-to-end LLM Generate run (needs an API key + running infra) is the one
+      remaining **manual** check for the user.
+- [x] **Docs.** Update the `USE-CASES.md` Generate entry: real generation now
       implemented; richer tools / MCP and the in-sandbox loop still planned.
 - [ ] Commit: "Wire the concrete codegen agent for host-run Generate."
 

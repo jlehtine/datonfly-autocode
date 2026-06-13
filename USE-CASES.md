@@ -29,10 +29,13 @@ built, deployable revision of their application variant.
 commit/integrate/tag, revision adoption, and deployment build — is implemented
 and unit-tested in the `codegen` and `orchestrator` packages. The control-plane
 Generate endpoint and the Shell trigger with progress streaming are implemented:
-the Shell can submit a prompt and observe `codegen-job-progress` steps. Because
-no concrete agent is wired yet, the endpoint returns **503** until a
-`CodegenProvider` is injected. The in-sandbox inner loop and the concrete agent
-wiring remain **planned** (see _Deferred_ below).
+the Shell can submit a prompt and observe `codegen-job-progress` steps. The
+concrete agent is now wired: when `ANTHROPIC_API_KEY` and a model
+(`DF_CODEGEN_MODEL`, falling back to `ANTHROPIC_MODEL`) are configured, the
+control plane builds an `AnthropicAgent` and the `HostCodegenProvider` it
+drives; absent that configuration the endpoint still returns **503** ("codegen
+not configured"). The in-sandbox inner loop, richer application-control tools /
+MCP servers, and the repair flow remain **planned** (see _Deferred_ below).
 
 ### Actors & trigger
 
@@ -132,8 +135,9 @@ application-owned partition).
 - In-sandbox codegen container replacing the host run, where the provider
   absorbs build/deploy and the agent gains **inner-loop build/test** tools for
   self-validation and iteration.
-- Wiring the concrete agent (model/key/config) plus real application-control /
-  customization tools and MCP servers.
+- Real application-control / customization tools and MCP servers for the codegen
+  agent (the concrete agent is wired with file tools only; richer tooling is
+  later).
 - The repair flow (`kind: "repair"`) — Phase 7 recovery loop.
 - Per-user backend-service generation (UI-only this slice).
 - Application-owned globs sourced from the manifest, plus a Git pre-commit hook

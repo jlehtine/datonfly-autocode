@@ -14,7 +14,9 @@
         "lint:fix": "eslint src/ --fix"
     },
     "dependencies": {
+        "@datonfly-assistant/agent-langchain": "link:../../../datonfly-assistant/packages/agent-langchain",
         "@datonfly-autocode/build-deploy": "workspace:*",
+        "@datonfly-autocode/codegen": "workspace:*",
         "@datonfly-autocode/core": "workspace:*",
         "@datonfly-autocode/orchestrator": "workspace:*",
         "@datonfly-autocode/repo-git": "workspace:*",

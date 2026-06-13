@@ -119,9 +119,15 @@ importers:
 
   packages/control-plane:
     dependencies:
+      '@datonfly-assistant/agent-langchain':
+        specifier: link:../../../datonfly-assistant/packages/agent-langchain
+        version: link:../../../datonfly-assistant/packages/agent-langchain
       '@datonfly-autocode/build-deploy':
         specifier: workspace:*
         version: link:../build-deploy
+      '@datonfly-autocode/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@datonfly-autocode/core':
         specifier: workspace:*
         version: link:../core

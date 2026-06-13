@@ -3,12 +3,20 @@ import "reflect-metadata";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { AnthropicAgent } from "@datonfly-assistant/agent-langchain";
 import { NestFactory } from "@nestjs/core";
 import { Logger, LoggerErrorInterceptor } from "nestjs-pino";
 import pino from "pino";
 
 import { HostBuildProvider } from "@datonfly-autocode/build-deploy";
-import { applicationIdSchema, type CodegenProvider, type ProviderLogger } from "@datonfly-autocode/core";
+import { HostCodegenProvider } from "@datonfly-autocode/codegen";
+import {
+    applicationIdSchema,
+    type CodegenProvider,
+    type ProviderLogger,
+    type RepoProvider,
+    type WorkspaceId,
+} from "@datonfly-autocode/core";
 import { createOrchestrator } from "@datonfly-autocode/orchestrator";
 import { LocalGitRepoProvider } from "@datonfly-autocode/repo-git";
 import { DockerSandboxProvider } from "@datonfly-autocode/sandbox-docker";
@@ -28,13 +36,46 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 /**
  * Resolve the codegen provider that backs the Generate flow.
  *
- * Codegen is wired only when an agent is configured. The concrete
- * `AnthropicAgent` and the `HostCodegenProvider` it drives land in §6.7; until
- * then this returns `undefined`, leaving `codegen` unset on the orchestrator so
- * the Generate endpoint surfaces a clean "codegen not configured" (503).
+ * Codegen is wired only when an Anthropic agent is configured. When both
+ * `ANTHROPIC_API_KEY` and a model (`DF_CODEGEN_MODEL`, falling back to
+ * `ANTHROPIC_MODEL`) are present, this builds the concrete {@link AnthropicAgent}
+ * and the {@link HostCodegenProvider} it drives over per-job application-scoped
+ * file tools. When neither is set, codegen stays unset so the Generate endpoint
+ * surfaces a clean "codegen not configured" (503). When only one is set, it logs
+ * what is missing and stays disabled rather than crashing the control plane.
+ *
+ * The file tools' schemas are built with this repo's `zod`; the agent runs its
+ * `zod → json-schema` conversion through the linked assistant's `@langchain/core`
+ * (a different `zod` copy). That cross-copy conversion is sound: LangChain
+ * detects `zod` v4 schemas structurally (`"_zod" in schema`) and converts via the
+ * stable `zod/v4/core` surface, so a v4.4 schema converts correctly under v4.3.
+ * The `as unknown as ITool[]` cast inside the provider only satisfies the type
+ * checker; this is the runtime side of that boundary.
  */
-function resolveCodegenProvider(): CodegenProvider | undefined {
-    return undefined;
+function resolveCodegenProvider(deps: {
+    repo: RepoProvider;
+    resolveWorkdir: (workspaceId: WorkspaceId) => string;
+    logger: ProviderLogger;
+}): CodegenProvider | undefined {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const modelName = process.env.DF_CODEGEN_MODEL ?? process.env.ANTHROPIC_MODEL;
+    if (!apiKey || !modelName) {
+        if (apiKey || modelName) {
+            deps.logger.warn(
+                { hasApiKey: Boolean(apiKey), hasModel: Boolean(modelName) },
+                "Codegen disabled: set both ANTHROPIC_API_KEY and DF_CODEGEN_MODEL (or ANTHROPIC_MODEL) to enable Generate",
+            );
+        }
+        return undefined;
+    }
+    const agent = new AnthropicAgent({ modelName, apiKey });
+    deps.logger.info({ modelName }, "Codegen enabled");
+    return new HostCodegenProvider({
+        agent,
+        repo: deps.repo,
+        resolveWorkdir: deps.resolveWorkdir,
+        logger: deps.logger.child({ component: "codegen" }),
+    });
 }
 
 async function bootstrap(): Promise<void> {
@@ -68,7 +109,11 @@ async function bootstrap(): Promise<void> {
 
     const sandbox = new DockerSandboxProvider({ logger: providerLogger.child({ component: "sandbox-docker" }) });
     const eventBus = new ControlPlaneEventBus();
-    const codegen = resolveCodegenProvider();
+    const codegen = resolveCodegenProvider({
+        repo,
+        resolveWorkdir: (workspaceId) => path.join(workspacesRoot, workspaceId),
+        logger: providerLogger,
+    });
     const orchestrator = createOrchestrator({
         repo,
         build,
