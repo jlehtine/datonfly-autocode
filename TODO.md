@@ -800,13 +800,15 @@ Decisions for this slice (resolved with the user):
 
 - [ ] **Phase 6 — Codegen** (`packages/codegen`): codegen sandbox, agent
       integration, Generate flow producing commits → build → deploy. Reuse the
-      **`datonfly-assistant` agent runtime**, extended with **tool support** and
-      the **MCP servers** the sandbox needs for application control and
-      customization (codegen runs inside the sandboxed dev environment). The
-      agent writes only the application-owned area; the stack toolchain is baked
-      into the sandbox image while build/deploy recipes come from the repo's
-      framework-owned area. Failed template upgrades route through the recovery
-      loop for agent-assisted repair.
+      **`datonfly-assistant` agent runtime**, which already provides **tool
+      support** (the `ITool` interface + `defaultTools` / per-call tool
+      override) and **MCP server** wiring (`McpServerSet` / `DF_MCP_SERVERS`).
+      Autocode supplies and injects the application-control and customization
+      tools / MCP servers the sandbox needs (codegen runs inside the sandboxed
+      dev environment). The agent writes only the application-owned area; the
+      stack toolchain is baked into the sandbox image while build/deploy recipes
+      come from the repo's framework-owned area. Failed template upgrades route
+      through the recovery loop for agent-assisted repair.
 - [ ] **Phase 7 — Recovery loop**: build/runtime error capture, auto-repair,
       vanilla/revert escape hatches, full recovery state machine.
 - [ ] **Phase 8 — Registry & security hardening** (`packages/registry`):
@@ -844,10 +846,12 @@ Resolutions to previously open design questions (recorded here):
   **self-hosted Forgejo** instance in-cluster, chosen for independent FOSS
   governance and Gitea-API compatibility (a Gitea backend stays a drop-in
   alternative).
-- **AI agent provider.** **Reuse `datonfly-assistant` agent components**,
-  extended with **tool support** and the **MCP servers** required for
-  application control and customization, run within the sandboxed dev
-  environment. No separate codegen runtime.
+- **AI agent provider.** **Reuse `datonfly-assistant` agent components**, run
+  within the sandboxed dev environment. The agent runtime already provides
+  **tool support** (`ITool` + injectable `defaultTools`) and **MCP server**
+  wiring (`McpServerSet` / `DF_MCP_SERVERS`), so Autocode supplies and injects
+  the tools / MCP servers required for application control and customization
+  rather than extending the runtime. No separate codegen runtime.
 - **Multi-tenancy granularity.** **Per-user** (namespace-per-user). Future
   extension: allow **admin-level users** to publish changes as **shareable
   components/services** consumed by other users.
