@@ -796,19 +796,173 @@ Decisions for this slice (resolved with the user):
 
 ---
 
+## Phase 6 — Codegen (Generate, host-run slice)
+
+First slice of **Codegen**: an agent-backed **Generate** flow that turns a
+prompt into committed application code and a new, built **Revision**, reusing
+the Phase 5 revision/build machinery. This slice is **library + orchestrator
+only** — no control-plane endpoint and no Shell binding yet — so it is exercised
+through unit tests with a **fake agent** (no LLM calls). It keeps the Phase 5
+**host-first** posture: the agent runs on the host, not yet inside an in-sandbox
+codegen container.
+
+Decisions for this slice (resolved with the user):
+
+- **Generate only, host-run.** Only `kind: "generate"` is implemented, by a
+  `HostCodegenProvider` that runs the agent **on the host** (mirroring the Phase
+  5 host-build decision). The in-sandbox codegen container and the `repair` flow
+  are **deferred** (repair lands with the Phase 7 recovery loop).
+- **UI-only generation.** The agent writes UI code only; the backend stays
+  vendor-owned. Per-user backend generation is a later template/stack evolution
+  (no control-plane change), so it is deferred.
+- **Library + orchestrator unit tests only.** No control-plane/Shell wiring and
+  no real LLM. The concrete `LangGraphAgent` (model/key/config) is injected by a
+  later control-plane slice; this slice injects a **fake `IAgentProvider`**.
+- **Ownership split.** `packages/codegen` (`HostCodegenProvider`) owns
+  **planned-diff → commit**: the agent writes application-owned files, which are
+  committed on a job branch, integrated, and tagged as a new Revision (minting
+  its id). The **orchestrator** owns the **deployment build** (the authoritative
+  rebuild-from-revision via `ensureBuilt`) and, later, **deploy** — so the
+  `build` / `deploy` step events are emitted by the orchestrator. This is
+  distinct from the agent's **inner-loop build/test** (compile/test the agent
+  runs _while generating_ to validate and iterate): that is a codegen-internal
+  agent tool inside `runJob`, throwaway, and does not cross the ownership
+  boundary. The deployment build re-derives the artifact from the committed
+  revision rather than trusting the sandbox's output (important once codegen
+  runs in a less-trusted sandbox). Both reuse the same build recipe/toolchain at
+  two call sites. A future in-sandbox provider may absorb build/deploy.
+- **One job = one generation cycle.** A `runCodegenJob` call represents a single
+  completed generation cycle (prompt → committed, built revision). The
+  multi-turn **interactive clarification loop** (the agent asking the user for
+  more detail and iterating) is owned by the `datonfly-assistant` agent runtime
+  plus the embedded chat, not by `runCodegenJob`; that binding is deferred with
+  the control-plane/Shell slice.
+- **Tool-level partition.** The agent's file tools are rooted at the workspace
+  working tree and **reject writes outside the application-owned globs**
+  (default `src/**`) and any path escaping the repo (traversal guard). The Git
+  **pre-commit hook** enforcing the partition is deferred to hardening.
+- **Additive `core` change only.** Add `runCodegenJob` to the `Orchestrator`
+  interface; the `CodegenProvider` / `CodegenJob` / step-event /
+  `codegen-job-progress` contracts already exist (Phase 1) and are unchanged.
+
+### 6.1 `core` — orchestrator codegen entry (additive)
+
+- [ ] Add `runCodegenJob(request: CodegenJobRequest): Promise<CodegenJobResult>`
+      to the `Orchestrator` interface in `src/interfaces/orchestrator.ts`. No
+      other contract changes — the codegen DTOs, step events, and the
+      `codegen-job-progress` event already exist. Rebuild `core`.
+
+### 6.2 `codegen` package (`packages/codegen`, `@datonfly-autocode/codegen`)
+
+- [ ] Scaffold mirroring `core`'s library setup (`package.json`,
+      `tsconfig.json` + `tsconfig.build.json` excluding tests, `tsc` build).
+      Deps: `@datonfly-autocode/core` (`workspace:*`),
+      `@datonfly-assistant/core` (`link:` to the sibling, type-only —
+      `IAgentProvider` / `ITool` / `AgentMessage`; the §3.7 registry migration
+      will later cover this too). Dev: `@types/node` (+ `"types": ["node"]`),
+      `typescript`, `vitest`.
+- [ ] **Application-scoped file tools** (`src/tools/fs-tools.ts`):
+      `createFileTools({ workdir, allowedGlobs })` returning `ITool[]`
+      (`list_files`, `read_file`, `write_file`, `search_files`), each resolving
+      paths against `workdir` and **rejecting** paths that escape the repo or
+      fall outside `allowedGlobs`; track the set of written files. Export
+      `DEFAULT_APPLICATION_OWNED_GLOBS = ["src/**"]`.
+- [ ] **`HostCodegenProvider`** (`src/host-codegen-provider.ts`) implementing
+      `core.CodegenProvider`, constructed with
+      `{ agent, repo, resolveWorkdir, applicationOwnedGlobs?, systemPrompt?, logger? }`.
+      `runJob(request, onStep)`:
+  - **planned-diff** → build per-job file tools over
+    `resolveWorkdir(workspaceId)`; call
+    `agent.run(messages, jobId, workspaceId, signal, { tools, systemPrompt })`
+    with the prompt + curated context; collect written files. Emit
+    started/completed (detail = changed-file list).
+  - **commit** → `repo.createBranch` + `repo.commit` the written
+    application-owned files on a job branch; `repo.integrateBranch`; mint a
+    `RevisionId` and `repo.tag(sha, rev-<id>)` (reuse the existing `rev-<id>`
+    convention). Emit started/completed (detail = sha).
+  - Return
+    `{ succeeded, producedRevisionId, summary, steps: [planned-diff, commit] }`.
+    On agent/commit failure → `{ succeeded: false, summary, steps }` with no
+    revision (repair is Phase 7).
+- [ ] **Barrel** (`src/index.ts`): export `HostCodegenProvider`,
+      `createFileTools`, `DEFAULT_APPLICATION_OWNED_GLOBS`, with JSDoc.
+- [ ] **Unit tests** (Vitest): file-tool traversal + out-of-glob write
+      rejection; a fake `IAgentProvider` that invokes `write_file` then returns
+      a summary, run over a real temp git repo (seeded `src/`), asserting the
+      branch / commit / integrate / tag round-trip, `producedRevisionId`, and
+      the planned-diff / commit step events.
+
+### 6.3 Orchestrator wiring (`packages/orchestrator`)
+
+- [ ] Add `codegen: CodegenProvider` to `OrchestratorOptions`; add
+      `codegenJobs: Map<CodegenJobId, CodegenJob>` to the store.
+- [ ] Implement `runCodegenJob(request)`: validate the workspace; record a
+      `CodegenJob` (`queued` → `planning`); call
+      `codegen.runJob(request, onStep → emit codegen-job-progress)`; on success
+      **adopt** the produced `Revision` into the store (parent =
+      `currentRevisionId`, `originatingJobId`, `buildStatus: pending`,
+      `gitTag =     rev-<id>`, `commitSha` via `repo.history`), then
+      `ensureBuilt` (emits the build step + caches the dist path) and set
+      `workspace.currentRevisionId`; mark the job `succeeded` / `failed`. Return
+      the `CodegenJobResult`.
+- [ ] Add `listCodegenJobs(workspaceId)` / `getCodegenJob(id)` accessors.
+- [ ] **Unit tests**: with a **fake** `CodegenProvider` (+ the existing fake
+      repo / build / sandbox), assert `runCodegenJob` records the job, adopts +
+      builds the new revision, advances `currentRevisionId`, emits
+      `codegen-job-progress` for each step plus the build step, and that a
+      subsequent `startSession` deploys the generated revision.
+
+### 6.4 Wiring & verification
+
+- [ ] Add `codegen` to the root `tsconfig.json` references.
+- [ ] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
+      `pnpm format:check`, and the `codegen` + orchestrator unit tests pass.
+- [ ] Commit: "Add host-run codegen with an agent-backed Generate flow."
+
+### 6.5 Use-case documentation
+
+- [ ] Create `USE-CASES.md` (top-level, numbered-section style matching
+      `ARCHITECTURE.md`) as the durable record of how the system behaves per
+      user goal. Each use case co-locates both lenses: **Actors & trigger**,
+      **User experience**, **Flow (implementation)** (components, ordered
+      interactions, events, linking to `ARCHITECTURE.md` sections and the
+      JSDoc'd interfaces), **Failure & recovery**, and **Status** (implemented /
+      partial / planned).
+- [ ] Write the first entry, **Generate**, capturing this slice's behavior and
+      the resolved decisions (deployment build vs. inner-loop build/test, one
+      job = one generation cycle, the ownership split), marking the in-sandbox
+      inner loop and interactive clarification as planned.
+- [ ] Cross-link: add `USE-CASES.md` to the Documentation section of
+      `CONVENTIONS.md`, and add a pointer from `ARCHITECTURE.md`.
+- [ ] Update `.github/copilot-instructions.md`: note that `USE-CASES.md` is the
+      durable record of system behavior and must be kept up to date as
+      implementation proceeds — including the convention that when a TODO slice
+      completes, its durable behavior is distilled into the relevant
+      `USE-CASES.md` section before the slice is pruned from `TODO.md`. Do
+      **not** instruct the agent to always read it; let it decide when the
+      information is needed.
+- [ ] Commit: "Document the Generate use case and the use-case doc workflow."
+
+### Deferred to a later slice
+
+- [ ] Control-plane Generate endpoint + `codegen-job-progress` over WS, and
+      binding the embedded chat to trigger Generate and stream progress.
+- [ ] In-sandbox codegen container (codegen image, in-container git/push, MCP
+      servers) replacing the host run; the provider absorbs build/deploy, and
+      the agent gains **inner-loop build/test** tools (compile/run tests while
+      generating) for self-validation and iteration.
+- [ ] Wire the concrete `LangGraphAgent` (model / key / config) + real
+      application-control / customization tools + MCP servers.
+- [ ] Repair flow (`kind: "repair"`) feeding build / runtime diagnostics back to
+      the agent — lands with the Phase 7 recovery loop.
+- [ ] Per-user backend-service generation (UI-only this slice).
+- [ ] Application-owned globs sourced from the manifest + the Git pre-commit
+      hook enforcing the framework / application partition.
+
+---
+
 ## Later phases (coarse — expand when reached)
 
-- [ ] **Phase 6 — Codegen** (`packages/codegen`): codegen sandbox, agent
-      integration, Generate flow producing commits → build → deploy. Reuse the
-      **`datonfly-assistant` agent runtime**, which already provides **tool
-      support** (the `ITool` interface + `defaultTools` / per-call tool
-      override) and **MCP server** wiring (`McpServerSet` / `DF_MCP_SERVERS`).
-      Autocode supplies and injects the application-control and customization
-      tools / MCP servers the sandbox needs (codegen runs inside the sandboxed
-      dev environment). The agent writes only the application-owned area; the
-      stack toolchain is baked into the sandbox image while build/deploy recipes
-      come from the repo's framework-owned area. Failed template upgrades route
-      through the recovery loop for agent-assisted repair.
 - [ ] **Phase 7 — Recovery loop**: build/runtime error capture, auto-repair,
       vanilla/revert escape hatches, full recovery state machine.
 - [ ] **Phase 8 — Registry & security hardening** (`packages/registry`):
@@ -852,6 +1006,12 @@ Resolutions to previously open design questions (recorded here):
   wiring (`McpServerSet` / `DF_MCP_SERVERS`), so Autocode supplies and injects
   the tools / MCP servers required for application control and customization
   rather than extending the runtime. No separate codegen runtime.
+- **Codegen execution & scope.** The first Codegen slice runs the agent **on the
+  host** (a `HostCodegenProvider`), mirroring the Phase 5 host-build decision;
+  the in-sandbox codegen container is a later slice. Generation is **UI-only**
+  to start (the backend stays vendor-owned); the architecture treats per-user
+  backend generation as a template/stack evolution rather than a control-plane
+  change, so it can be added later without control-plane changes.
 - **Multi-tenancy granularity.** **Per-user** (namespace-per-user). Future
   extension: allow **admin-level users** to publish changes as **shareable
   components/services** consumed by other users.
@@ -899,5 +1059,3 @@ Resolutions to previously open design questions (recorded here):
 
 - Registry default mode (allow-list-only Mode A first vs. curated mirror Mode B)
   — before Phase 8.
-- Backend-extension scope (UI-only generation first vs. per-user backend service
-  generation from the start) — before Phase 6.
