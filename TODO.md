@@ -112,7 +112,6 @@ skeleton and tooling parity with `datonfly-assistant`. Exit criteria:
       `pnpm build` bootstrap. Expand in Phase 9.
 - [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`, and
       `pnpm format:check` succeed on the empty skeleton.
-- [x] Commit: "Scaffold the Autocode monorepo and core package skeleton."
 
 ---
 
@@ -945,7 +944,6 @@ Decisions for this slice (resolved with the user):
 - [x] Add `codegen` to the root `tsconfig.json` references.
 - [x] Run `pnpm install`, then confirm `pnpm build`, `pnpm lint`,
       `pnpm format:check`, and the `codegen` + orchestrator unit tests pass.
-- [ ] Commit: "Add host-run codegen with an agent-backed Generate flow."
 
 ### 6.5 Use-case documentation
 
@@ -969,7 +967,6 @@ Decisions for this slice (resolved with the user):
       `USE-CASES.md` section before the slice is pruned from `TODO.md`. Do
       **not** instruct the agent to always read it; let it decide when the
       information is needed.
-- [ ] Commit: "Document the Generate use case and the use-case doc workflow."
 
 ### Deferred to a later slice
 
