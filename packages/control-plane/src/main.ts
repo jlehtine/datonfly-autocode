@@ -29,7 +29,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * Resolve the codegen provider that backs the Generate flow.
  *
  * Codegen is wired only when an agent is configured. The concrete
- * `LangGraphAgent` and the `HostCodegenProvider` it drives land in §6.7; until
+ * `AnthropicAgent` and the `HostCodegenProvider` it drives land in §6.7; until
  * then this returns `undefined`, leaving `codegen` unset on the orchestrator so
  * the Generate endpoint surfaces a clean "codegen not configured" (503).
  */

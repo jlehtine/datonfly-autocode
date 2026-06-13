@@ -841,7 +841,7 @@ Decisions for this slice (resolved with the user):
   vendor-owned. Per-user backend generation is a later template/stack evolution
   (no control-plane change), so it is deferred.
 - **Library + orchestrator unit tests only.** No control-plane/Shell wiring and
-  no real LLM. The concrete `LangGraphAgent` (model/key/config) is injected by a
+  no real LLM. The concrete `AnthropicAgent` (model/key/config) is injected by a
   later control-plane slice; this slice injects a **fake `IAgentProvider`**.
 - **Ownership split.** `packages/codegen` (`HostCodegenProvider`) owns
   **planned-diff → commit**: the agent writes application-owned files, which are
@@ -979,7 +979,7 @@ present in the Shell.
 review).**
 
 - **Split from the concrete agent.** This slice ships only the _surface_; wiring
-  the real `LangGraphAgent` is the separate §6.7. Rationale: the surface is
+  the real `AnthropicAgent` is the separate §6.7. Rationale: the surface is
   fully testable with fakes (mirroring the orchestrator's `FakeCodegenProvider`)
   and carries no LLM rate-limit or dual-zod risk, whereas the concrete agent
   does (see the §6.7 interop note). Keeping them apart preserves the small,
@@ -1046,13 +1046,13 @@ Steps:
 
 The LLM-sensitive follow-up that makes Generate do real work. **Carries the
 dual-zod tool-schema interop hazard** recorded in repo memory: the real
-`LangGraphAgent` runs `zod → json-schema` on the file tools' schemas at runtime,
+`AnthropicAgent` runs `zod → json-schema` on the file tools' schemas at runtime,
 so the tools' zod instance must match the agent's (the §6.4 boundary cast only
 satisfies the type checker, not the runtime conversion).
 
 Steps:
 
-- [ ] **Agent factory.** Construct the concrete `LangGraphAgent` from
+- [ ] **Agent factory.** Construct the concrete `AnthropicAgent` from
       `@datonfly-assistant/core` (model / key / config from env) and inject it
       into the `HostCodegenProvider` in `main.ts` (the gate from §6.6).
 - [ ] **Resolve the zod interop.** Ensure the file tools' schemas are converted
